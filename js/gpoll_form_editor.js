@@ -58,12 +58,12 @@ jQuery(document).bind("gform_load_field_settings", function (event, field, form)
 
 
 
-jQuery(document).ready(function () {
-    if(typeof fieldSettings == 'undefined')
-        return;
-
-    fieldSettings["poll"] = ".poll_field_type_setting, .poll_question_setting, .randomize_choices_setting";
-});
+//jQuery(document).ready(function () {
+//    if(typeof fieldSettings == 'undefined')
+//        return;
+//
+//    fieldSettings["poll"] = ".poll_field_type_setting, .poll_question_setting, .randomize_choices_setting";
+//});
 
 /* deprecated functions
 

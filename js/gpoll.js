@@ -7,7 +7,8 @@
         resultsButton = '<a href="javascript:void(0)" class="gpoll_button">' + strings.viewResults + '</a><div class="gpoll_summary"></div>';
         backButtonMarkup = '<a href="javascript:void(0)" class="gpoll_back_button" style="display:none;">' + strings.backToThePoll + '</a>';
 
-        $(".gform_wrapper.gpoll_enabled form").each(function(){
+        // Gravity Forms 2.0 adds _wrapper to the wrapper classes
+        $(".gform_wrapper.gpoll_enabled form, .gform_wrapper.gpoll_enabled_wrapper form").each(function(){
             var pollVars = getPollVars(this);
             if (pollVars.showResultsLink == "1" || (pollVars.override == "0" && jQuery(this).hasClass("gpoll_show_results_link")))
                 $(this).find(".gform_button").parent().append(resultsButton);
@@ -124,10 +125,12 @@
             pollVars.previewResults = 1;
         } else {
             hasVoted = cookieExists("gpoll_form_" + formId);
-            if (false === hasVoted || "" === pollVars.cookieDuration)
+            if (false === hasVoted || "" === pollVars.cookieDuration){
                 return;
-            container = jQuery(form).closest(".gform_wrapper.gpoll_enabled");
-            formSettingBlockRepeatVoters = jQuery(container).hasClass('gpoll_block_repeat_voters');
+            }
+            // Gravity Forms 2.0 adds _wrapper to the wrapper classes
+            container = jQuery(form).closest(".gform_wrapper.gpoll_enabled, .gform_wrapper.gpoll_enabled_wrapper");
+            formSettingBlockRepeatVoters = $(container).hasClass('gpoll_block_repeat_voters') || $(container).hasClass('gpoll_block_repeat_voters_wrapper');
             if ( pollVars.cookieDuration == undefined && false === formSettingBlockRepeatVoters)
                 return;
 
@@ -148,7 +151,8 @@
                 }
                 else {
                     var $form = $(form);
-                    container = $form.closest(".gform_wrapper.gpoll_enabled");
+                    // Gravity Forms 2.0 adds _wrapper to the wrapper classes
+                    container = $form.closest(".gform_wrapper.gpoll_enabled, .gform_wrapper.gpoll_enabled_wrapper");
                     if (previewResults){
 
                         $form.find(".gpoll_summary").html(result.resultsUI);

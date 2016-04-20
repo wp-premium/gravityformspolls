@@ -1,3 +1,9 @@
+---------------------------------------------------------------------
+Version 3.0
+    - Added support for Gravity Forms 2.0.0
+    - Added GF_Field_Poll.
+    - Fixed an issue with the AWeber integration.
+
 ------------------------------------------------------------
 Version 2.4
     - Updated minimum Gravity Forms version to 1.9.
