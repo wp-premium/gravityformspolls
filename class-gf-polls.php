@@ -51,25 +51,40 @@ class GFPolls extends GFAddOn {
 	private static $_instance = null;
 
 	public $_version = GF_POLLS_VERSION;
-	protected $_min_gravityforms_version = '1.9';
+	protected $_min_gravityforms_version = '1.9.15.12';
 	protected $_slug = 'gravityformspolls';
 	protected $_path = 'gravityformspolls/polls.php';
 	protected $_full_path = __FILE__;
 	protected $_url = 'http://www.gravityforms.com';
 	protected $_title = 'Gravity Forms Polls Add-On';
 	protected $_short_title = 'Polls';
-
-	// Members plugin integration
-	protected $_capabilities = array( 'gravityforms_polls', 'gravityforms_polls_uninstall', 'gravityforms_polls_results', 'gravityforms_polls_settings', 'gravityforms_polls_form_settings' );
-
-	// Permissions
-	protected $_capabilities_settings_page = 'gravityforms_polls_settings';
-	protected $_capabilities_form_settings = 'gravityforms_polls_form_settings';
-	protected $_capabilities_uninstall = 'gravityforms_polls_uninstall';
 	protected $_enable_rg_autoupgrade = true;
 	private $_form_meta_by_id = array();
 	public $gpoll_add_scripts;
 
+	/**
+	 * Members plugin integration
+	 */
+	protected $_capabilities = array(
+		'gravityforms_polls',
+		'gravityforms_polls_uninstall',
+		'gravityforms_polls_results',
+		'gravityforms_polls_settings',
+		'gravityforms_polls_form_settings'
+	);
+
+	/**
+	 * Permissions
+	 */
+	protected $_capabilities_settings_page = 'gravityforms_polls_settings';
+	protected $_capabilities_form_settings = 'gravityforms_polls_form_settings';
+	protected $_capabilities_uninstall = 'gravityforms_polls_uninstall';
+
+	/**
+	 * Get an instance of this class.
+	 *
+	 * @return GFPolls
+	 */
 	public static function get_instance() {
 		if ( self::$_instance == null ) {
 			self::$_instance = new GFPolls();
@@ -81,13 +96,141 @@ class GFPolls extends GFAddOn {
 	private function __clone() {
 	} /* do nothing */
 
-	public function __construct() {
-		parent::__construct();
-		add_action( 'gform_after_submission', array( $this, 'after_submission' ), 10, 2 );
-		add_filter( 'gform_export_field_value', array( $this, 'display_entries_field_value' ), 10, 3 );
-		add_action( 'gform_polls_cron', array( $this, 'wp_cron_task' ) );
+	/**
+	 * Handles anything which requires early initialization.
+	 */
+	public function pre_init() {
+		parent::pre_init();
+
+		if ( $this->is_gravityforms_supported() && class_exists( 'GF_Field' ) ) {
+			require_once( 'includes/class-gf-field-poll.php' );
+
+			add_action( 'gform_after_submission', array( $this, 'after_submission' ), 10, 2 );
+			add_filter( 'gform_export_field_value', array( $this, 'display_entries_field_value' ), 10, 4 );
+			add_action( 'gform_polls_cron', array( $this, 'wp_cron_task' ) );
+		}
 	}
 
+	/**
+	 * Handles hooks and loading of language files.
+	 */
+	public function init() {
+
+		// add a special class to poll fields so we can identify them later
+		add_action( 'gform_field_css_class', array( $this, 'add_custom_class' ), 10, 3 );
+
+		if ( $this->get_custom_cron_schedule() ) {
+			add_filter( 'cron_schedules', array( $this, 'cron_add_custom_schedule' ) );
+		}
+
+		// add wp_cron job if it's not already scheduled
+		if ( ! wp_next_scheduled( 'gform_polls_cron' ) ) {
+			wp_schedule_event( time(), $this->get_cron_recurrence(), 'gform_polls_cron' );
+		}
+
+		add_filter( 'gform_shortcode_polls', array( $this, 'poll_shortcode' ), 10, 3 );
+
+		add_filter( 'gform_pre_render', array( $this, 'pre_render' ) );
+
+		// shuffle choices if configured
+		add_filter( 'gform_field_content', array( $this, 'render_poll_field_content' ), 10, 5 );
+
+		add_action( 'gform_validation', array( $this, 'form_validation' ) );
+
+		// update the cache
+		add_action( 'gform_entry_created', array( $this, 'entry_created' ), 10, 2 );
+
+		// maybe display results on confirmation
+		add_filter( 'gform_confirmation', array( $this, 'display_confirmation' ), 10, 4 );
+
+		add_shortcode( 'gfpolls_total', array( $this, 'poll_total_shortcode' ) );
+
+		// merge tags
+		add_filter( 'gform_replace_merge_tags', array( $this, 'render_merge_tag' ), 10, 7 );
+
+		add_filter( 'gform_entry_field_value', array( $this, 'display_poll_on_entry_detail' ), 10, 4 );
+
+		// Integration with the feed add-ons as of GF 1.9.15.12; for add-ons which don't override get_field_value().
+		add_filter( 'gform_addon_field_value', array( $this, 'addon_field_value' ), 10, 5 );
+
+		// AWeber 2.3 and newer use the gform_addon_field_value hook, only use the gform_aweber_field_value hook with older versions.
+		if ( defined( 'GF_AWEBER_VERSION' ) && version_compare( GF_AWEBER_VERSION, '2.3', '<' ) ) {
+			add_filter( 'gform_aweber_field_value', array( $this, 'display_entries_field_value' ), 10, 4 );
+		}
+
+		// Mailchimp Add-On integration
+		add_filter( 'gform_mailchimp_field_value', array( $this, 'display_entries_field_value' ), 10, 4 );
+
+		// Campaign Monitor Add-On integration
+		add_filter( 'gform_campaignmonitor_field_value', array( $this, 'display_entries_field_value' ), 10, 4 );
+
+		// Zapier Add-On integration
+		add_filter( 'gform_zapier_field_value', array( $this, 'display_entries_field_value' ), 10, 4 );
+
+		parent::init();
+	}
+
+	/**
+	 * Initialize the admin specific hooks.
+	 */
+	public function init_admin() {
+
+		//form editor
+		add_action( 'gform_field_standard_settings', array( $this, 'poll_field_settings' ), 10, 2 );
+		add_filter( 'gform_tooltips', array( $this, 'add_poll_field_tooltips' ) );
+		add_action( 'gform_after_save_form', array( $this, 'after_save_form' ), 10, 2 );
+
+		//display poll results on entry list
+		add_filter( 'gform_entries_field_value', array( $this, 'display_entries_field_value' ), 10, 4 );
+
+		//merge tags
+		add_filter( 'gform_admin_pre_render', array( $this, 'add_merge_tags' ) );
+
+		//update the cache
+		add_action( 'gform_after_update_entry', array( $this, 'entry_updated' ), 10, 2 );
+		add_action( 'gform_update_status', array( $this, 'update_entry_status' ), 10, 2 );
+
+		// contacts
+		add_filter( 'gform_contacts_tabs_contact_detail', array( $this, 'add_tab_to_contact_detail' ), 10, 2 );
+		add_action( 'gform_contacts_tab_polls', array( $this, 'contacts_tab' ) );
+
+		// Adds the polls action to the shortcode builder UI
+		add_filter( 'gform_shortcode_builder_actions', array( $this, 'add_polls_shortcode_ui_action' ) );
+
+		parent::init_admin();
+	}
+
+	/**
+	 * Initialize the AJAX hooks.
+	 */
+	public function init_ajax() {
+
+		add_action( 'wp_ajax_gpoll_ajax', array( $this, 'gpoll_ajax' ) );
+		add_action( 'wp_ajax_nopriv_gpoll_ajax', array( $this, 'gpoll_ajax' ) );
+
+		parent::init_ajax();
+	}
+
+	/**
+	 * The Polls add-on does not support logging.
+	 *
+	 * @param array $plugins The plugins which support logging.
+	 *
+	 * @return array
+	 */
+	public function set_logging_supported( $plugins ) {
+
+		return $plugins;
+
+	}
+
+	// # SCRIPTS & STYLES -----------------------------------------------------------------------------------------------
+
+	/**
+	 * Return the scripts which should be enqueued.
+	 *
+	 * @return array
+	 */
 	public function scripts() {
 		$scripts = array(
 			array(
@@ -96,9 +239,9 @@ class GFPolls extends GFAddOn {
 				'version' => $this->_version,
 				'deps'    => array( 'jquery' ),
 				'strings' => array(
-					'firstChoice'  => __( 'First Choice', 'gravityformspolls' ),
-					'secondChoice' => __( 'Second Choice', 'gravityformspolls' ),
-					'thirdChoice'  => __( 'Third Choice', 'gravityformspolls' )
+					'firstChoice'  => esc_html__( 'First Choice', 'gravityformspolls' ),
+					'secondChoice' => esc_html__( 'Second Choice', 'gravityformspolls' ),
+					'thirdChoice'  => esc_html__( 'Third Choice', 'gravityformspolls' )
 				),
 				'enqueue' => array(
 					array( 'admin_page' => array( 'form_editor' ) ),
@@ -131,6 +274,11 @@ class GFPolls extends GFAddOn {
 		return array_merge( parent::scripts(), $scripts );
 	}
 
+	/**
+	 * Return the stylesheets which should be enqueued.
+	 *
+	 * @return array
+	 */
 	public function styles() {
 
 		$styles = array(
@@ -156,590 +304,9 @@ class GFPolls extends GFAddOn {
 		return array_merge( parent::styles(), $styles );
 	}
 
-	public function get_results_page_config() {
-		return array(
-			'title'        => __( 'Poll Results', 'gravityformspolls' ),
-			'capabilities' => array( 'gravityforms_polls_results' ),
-			'callbacks'    => array(
-				'fields' => array( $this, 'results_fields' )
-			)
-		);
-	}
-
-	public function results_fields( $form ) {
-		return GFCommon::get_fields_by_type( $form, array( 'poll' ) );
-	}
-
-
-	public function init_admin() {
-
-		//form editor
-		add_filter( 'gform_add_field_buttons', array( $this, 'add_poll_field' ) );
-		add_action( 'gform_field_standard_settings', array( $this, 'poll_field_settings' ), 10, 2 );
-		add_filter( 'gform_tooltips', array( $this, 'add_poll_field_tooltips' ) );
-		add_action( 'gform_after_save_form', array( $this, 'after_save_form' ), 10, 2 );
-		add_filter( 'gform_field_type_title', array( $this, 'assign_title' ), 10, 2 );
-
-		//display poll results on entry detail & entry list
-		add_filter( 'gform_entry_field_value', array( $this, 'display_poll_on_entry_detail' ), 10, 4 );
-		add_filter( 'gform_entries_field_value', array( $this, 'display_entries_field_value' ), 10, 3 );
-
-		//merge tags
-		add_filter( 'gform_admin_pre_render', array( $this, 'add_merge_tags' ) );
-
-		//update the cache
-		add_action( 'gform_after_update_entry', array( $this, 'entry_updated' ), 10, 2 );
-		add_action( 'gform_update_status', array( $this, 'update_entry_status' ), 10, 2 );
-
-		// contacts
-		add_filter( 'gform_contacts_tabs_contact_detail', array( $this, 'add_tab_to_contact_detail' ), 10, 2 );
-		add_action( 'gform_contacts_tab_polls', array( $this, 'contacts_tab' ) );
-
-
-		// Adds the polls action to the shortcode builder UI
-		add_filter( 'gform_shortcode_builder_actions', array( $this, 'add_polls_shortcode_ui_action' ) );
-
-		parent::init_admin();
-	}
-
-	public function init_ajax() {
-
-
-		add_action( 'wp_ajax_gpoll_ajax', array( $this, 'gpoll_ajax' ) );
-		add_action( 'wp_ajax_nopriv_gpoll_ajax', array( $this, 'gpoll_ajax' ) );
-
-		// merge tags for resending notifications
-		add_filter( 'gform_merge_tag_filter', array( $this, 'merge_tag_filter' ), 10, 5 );
-		add_filter( 'gform_replace_merge_tags', array( $this, 'render_merge_tag' ), 10, 7 );
-
-		if ( rgpost( 'action' ) == 'rg_add_field' ) {
-			add_filter( 'gform_field_type_title', array( $this, 'assign_title' ), 10, 2 );
-		}
-
-
-		parent::init_ajax();
-	}
-
-	public function init_frontend() {
-
-		// maybe display results on confirmation
-		add_filter( 'gform_confirmation', array( $this, 'display_confirmation' ), 10, 4 );
-
-		add_shortcode( 'gfpolls_total', array( $this, 'poll_total_shortcode' ) );
-
-		// merge tags
-		add_filter( 'gform_merge_tag_filter', array( $this, 'merge_tag_filter' ), 10, 5 );
-		add_filter( 'gform_replace_merge_tags', array( $this, 'render_merge_tag' ), 10, 7 );
-
-		add_filter( 'gform_entry_field_value', array( $this, 'display_poll_on_entry_print' ), 10, 4 );
-
-		// shuffle choices if configured
-		add_filter( 'gform_field_content', array( $this, 'render_poll_field_content' ), 10, 5 );
-
-		// update the cache
-		add_action( 'gform_entry_created', array( $this, 'entry_created' ), 10, 2 );
-
-		add_action( 'gform_validation', array( $this, 'form_validation' ) );
-
-		// Mailchimp Add-On integration
-		add_filter( 'gform_mailchimp_field_value', array( $this, 'display_entries_field_value' ), 10, 4 );
-
-		// Aweber Add-On integration
-		add_filter( 'gform_aweber_field_value', array( $this, 'display_entries_field_value' ), 10, 4 );
-
-		// Campaign Monitor Add-On integration
-		add_filter( 'gform_campaignmonitor_field_value', array( $this, 'display_entries_field_value' ), 10, 4 );
-
-		// Zapier Add-On integration
-		add_filter( 'gform_zapier_field_value', array( $this, 'display_entries_field_value' ), 10, 4 );
-
-		parent::init_frontend();
-	}
-
-	public function init() {
-
-
-		// add a special class to poll fields so we can identify them later
-		add_action( 'gform_field_css_class', array( $this, 'add_custom_class' ), 10, 3 );
-
-		if ( $this->get_custom_cron_schedule() ) {
-			add_filter( 'cron_schedules', array( $this, 'cron_add_custom_schedule' ) );
-		}
-
-		// add wp_cron job if it's not already scheduled
-		if ( ! wp_next_scheduled( 'gform_polls_cron' ) ) {
-			wp_schedule_event( time(), $this->get_cron_recurrence(), 'gform_polls_cron' );
-		}
-
-		add_filter( 'gform_shortcode_polls', array( $this, 'poll_shortcode' ), 10, 3 );
-		add_filter( 'gform_pre_render', array( $this, 'pre_render' ) );
-
-		parent::init();
-	} //end function init
-
-	public function upgrade( $previous_version ) {
-		$previous_is_pre_addon_framework = version_compare( $previous_version, '1.5.4', '<' );
-
-		if ( $previous_is_pre_addon_framework ) {
-			$forms = GFFormsModel::get_forms();
-			foreach ( $forms as $form ) {
-				$form_meta = GFFormsModel::get_form_meta( $form->id );
-				$this->upgrade_form_settings( $form_meta );
-			}
-		}
-	}
-
-
-	// Form Settings
-
-	public function add_form_settings_menu( $tabs, $form_id ) {
-		$form        = $this->get_form_meta( $form_id );
-		$poll_fields = GFCommon::get_fields_by_type( $form, array( 'poll' ) );
-		if ( false === empty( $poll_fields ) ) {
-			$tabs[] = array( 'name' => 'gravityformspolls', 'label' => __( 'Polls', 'gravityformspolls' ) );
-		}
-
-		return $tabs;
-	}
-
-	public function form_settings_fields( $form ) {
-
-		// check for legacy form settings from a form exported from a previous version pre-framework
-		$page = rgget( 'page' );
-		if ( 'gf_edit_forms' == $page && false === empty( $form_id ) ) {
-			$settings = $this->get_form_settings( $form );
-			if ( empty( $settings ) && isset( $form['gpollDisplayResults'] ) ) {
-				$this->upgrade_form_settings( $form );
-			}
-		}
-
-		return array(
-			array(
-				'title'  => __( 'Poll Settings', 'gravityformspolls' ),
-
-				'fields' => array(
-					array(
-						'label'   => __( 'Results', 'gravityformspolls' ),
-						'type'    => 'checkbox',
-						'name'    => 'displayResults',
-						'tooltip' => '<h6>' . __( 'Results', 'gravityformspolls' ) . '</h6>' . __( 'Select this option to display the results of submitted poll fields after the form is submitted.', 'gravityformspolls' ),
-						'choices' => array(
-							0 => array(
-								'label'         => __( 'Display results of submitted poll fields after voting', 'gravityformspolls' ),
-								'name'          => 'displayResults',
-								'default_value' => $this->get_form_setting( array(), 'displayResults' )
-							)
-						)
-					),
-					array(
-						'label'   => __( 'Results Link', 'gravityformspolls' ),
-						'type'    => 'checkbox',
-						'name'    => 'showResultsLink',
-						'tooltip' => '<h6>' . __( 'Results Link', 'gravityformspolls' ) . '</h6>' . __( 'Select this option to add a link to the form which allows the visitor to see the results without voting.', 'gravityformspolls' ),
-						'choices' => array(
-							0 => array(
-								'label'         => __( 'Add a poll results link to the form', 'gravityformspolls' ),
-								'name'          => 'showResultsLink',
-								'default_value' => $this->get_form_setting( array(), 'showResultsLink' ),
-							)
-						)
-					),
-					array(
-						'label'   => __( 'Percentages', 'gravityformspolls' ),
-						'type'    => 'checkbox',
-						'name'    => 'showPercentages',
-						'tooltip' => '<h6>' . __( 'Show Percentages', 'gravityformspolls' ) . '</h6>' . __( 'Show the percentage of the total votes for each choice.', 'gravityformspolls' ),
-						'choices' => array(
-							0 => array(
-								'label'         => __( 'Display percentages', 'gravityformspolls' ),
-								'name'          => 'showPercentages',
-								'default_value' => $this->get_form_setting( array(), 'showPercentages' )
-							)
-						)
-					),
-					array(
-						'label'   => __( 'Counts', 'gravityformspolls' ),
-						'type'    => 'checkbox',
-						'name'    => 'showCounts',
-						'tooltip' => '<h6>' . __( 'Show Counts', 'gravityformspolls' ) . '</h6>' . __( 'Show the total number of votes for each choice.', 'gravityformspolls' ),
-						'choices' => array(
-							0 => array(
-								'label'         => __( 'Display counts', 'gravityformspolls' ),
-								'name'          => 'showCounts',
-								'default_value' => $this->get_form_setting( array(), 'showCounts' )
-							)
-						)
-					),
-					array(
-						'label'         => __( 'Style', 'gravityformspolls' ),
-						'name'          => 'style',
-						'default_value' => $this->get_form_setting( array(), 'style' ),
-						'type'          => 'select',
-						'choices'       => array(
-							array( 'label' => __( 'Green', 'gravityformspolls' ), 'value' => 'green' ),
-							array( 'label' => __( 'Blue', 'gravityformspolls' ), 'value' => 'blue' ),
-							array( 'label' => __( 'Red', 'gravityformspolls' ), 'value' => 'red' ),
-							array( 'label' => __( 'Orange', 'gravityformspolls' ), 'value' => 'orange' ),
-						)
-					),
-					array(
-						'label'   => __( 'Block repeat voters', 'gravityformspolls' ),
-						'type'    => 'block_repeat_voters',
-						'name'    => 'blockRepeatVoters',
-						'tooltip' => '<h6>' . __( 'Block Repeat Voters', 'gravityformspolls' ) . '</h6>' . __( "Choose whether to allow visitors to vote more than once. Repeat voting is controlled by storing a cookie on the visitor's computer.", 'gravityformspolls' ),
-					),
-				)
-			),
-		);
-	}
-
-	public function settings_block_repeat_voters() {
-		$this->settings_radio(
-			array(
-				'label'         => __( 'Repeat Voters', 'gravityformspolls' ),
-				'name'          => 'blockRepeatVoters',
-				'class'         => 'gpoll-block-repeat-voters',
-				'default_value' => $this->get_form_setting( array(), 'blockRepeatVoters' ) ? '1' : '0',
-				'type'          => 'radio',
-				'choices'       => array(
-					array( 'label' => __( "Don't block repeat voting", 'gravityformspolls' ), 'value' => '0' ),
-					array( 'label' => __( 'Block repeat voting using cookie', 'gravityformspolls' ), 'value' => '1' ),
-				)
-			)
-		);
-
-		echo __( 'Expires: ', 'gravityformspolls' );
-		$this->settings_select(
-			array(
-				'name'          => 'cookie',
-				'default_value' => $this->get_form_setting( array(), 'cookie' ),
-				'type'          => 'select',
-				'choices'       => array(
-					array( 'label' => __( 'Never', 'gravityformspolls' ), 'value' => '20 years' ),
-					array( 'label' => __( '1 hour', 'gravityformspolls' ), 'value' => '1 hour' ),
-					array( 'label' => __( '6 hours', 'gravityformspolls' ), 'value' => '6 hours' ),
-					array( 'label' => __( '12 hours', 'gravityformspolls' ), 'value' => '12 hours' ),
-					array( 'label' => __( '1 day', 'gravityformspolls' ), 'value' => '1 day' ),
-					array( 'label' => __( '1 week', 'gravityformspolls' ), 'value' => '1 week' ),
-					array( 'label' => __( '1 month', 'gravityformspolls' ), 'value' => '1 month' ),
-				)
-			)
-		);
-	}
-
-	private function upgrade_form_settings( $form ) {
-		if ( false === isset( $form['gpollDisplayResults'] ) ) {
-			return;
-		}
-
-		$legacy_form_settings = array(
-			'gpollDisplayResults'    => 'displayResults',
-			'gpollShowResultsLink'   => 'showResultsLink',
-			'gpollShowPercentages'   => 'showPercentages',
-			'gpollShowCounts'        => 'showCounts',
-			'gpollBlockRepeatVoters' => 'blockRepeatVoters',
-			'gpollStyle'             => 'style',
-			'gpollCookie'            => 'cookie',
-		);
-
-		$new_settings = array();
-		foreach ( $legacy_form_settings as $legacy_key => $new_key ) {
-			if ( isset( $form[ $legacy_key ] ) ) {
-				$new_settings[ $new_key ] = $form[ $legacy_key ];
-				unset( $form[ $legacy_key ] );
-			}
-		}
-		if ( false === empty( $new_settings ) ) {
-			$form[ $this->_slug ] = $new_settings;
-			GFFormsModel::update_form_meta( $form['id'], $form );
-		}
-	}
-
-
-	/*--------- Ajax functions -------*/
-
-	public function gpoll_ajax() {
-		$output = array();
-
-		$form_id = rgpost( 'formId' );
-		$form    = RGFormsModel::get_form_meta( $form_id );
-
-		$preview_results = rgpost( 'previewResults' );
-		$preview_results = $preview_results == '1' ? true : false;
-
-		$has_voted = isset ( $_COOKIE[ 'gpoll_form_' . $form_id ] );
-		$override  = false;
-		if ( rgpost( 'override' ) == 1 ) {
-			$show_results_link = rgpost( 'showResultsLink' ) == '1' ? true : false;
-
-			$display_results = rgpost( 'displayResults' ) == '1' ? true : false;
-			$confirmation    = rgpost( 'confirmation' ) == '1' ? true : false;
-			$percentages     = rgpost( 'percentages' ) == '1' ? true : false;
-			$counts          = rgpost( 'counts' ) == '1' ? true : false;
-			$cookie_duration = urldecode( rgpost( 'cookieDuration' ) );
-			$style           = rgpost( 'style' );
-			$checksum        = rgpost( 'checksum' );
-			if ( $checksum == $this->generate_checksum( $display_results, $show_results_link, $cookie_duration, $confirmation, $percentages, $counts, $style ) ) {
-				$override = true;
-			}
-		}
-
-		if ( false === $override ) {
-			$show_results_link   = $this->get_form_setting( $form, 'showResultsLink' );
-			$display_results     = $this->get_form_setting( $form, 'displayResults' );
-			$confirmation        = true;
-			$percentages         = $this->get_form_setting( $form, 'showPercentages' );
-			$counts              = $this->get_form_setting( $form, 'showCounts' );
-			$style               = $this->get_form_setting( $form, 'style' );
-			$block_repeat_voters = $this->get_form_setting( $form, 'blockRepeatVoters' );
-
-			if ( $block_repeat_voters ) {
-				$cookie_duration = $this->get_form_setting( $form, 'cookie' );
-			} else {
-				$cookie_duration = '';
-			}
-		}
-
-
-		$can_vote          = ( ! $has_voted ) || ( empty( $cookie_duration ) && $has_voted );
-		$output['canVote'] = $can_vote;
-
-		if ( $preview_results || ( false === $can_vote ) ) {
-
-			if ( '' === $show_results_link ) {
-				$show_results_link = true;
-			}
-
-			if ( ( $preview_results && $show_results_link ) || $display_results ) {
-				$results             = $this->gpoll_get_results( $form_id, '0', $style, $percentages, $counts );
-				$results_summary     = $results['summary'];
-				$output['resultsUI'] = $results_summary;
-			} else {
-				if ( $confirmation ) {
-					require_once( GFCommon::get_base_path() . '/form_display.php' );
-					$output['resultsUI'] = GFFormDisplay::handle_confirmation( $form, null );
-				} else {
-					$output['resultsUI'] = '';
-				}
-			}
-		} else {
-			$output['resultsUI'] = '';
-		}
-
-		echo json_encode( $output );
-		die();
-
-	}
-
-	/*--------- Front-end UI functions -------*/
-
-	public function get_form_setting( $form, $setting_name ) {
-		if ( false === empty( $form ) ) {
-			$settings = $this->get_form_settings( $form );
-
-			// check for legacy form settings from a form exported from a previous version pre-framework
-			if ( empty( $settings ) && isset( $form['gpollDisplayResults'] ) ) {
-				$this->upgrade_form_settings( $form );
-			}
-
-			if ( isset( $settings[ $setting_name ] ) ) {
-				$setting_value = $settings[ $setting_name ];
-				if ( $setting_value == '1' ) {
-					$setting_value = true;
-				} elseif ( $setting_value == '0' ) {
-					$setting_value = false;
-				}
-
-				return $setting_value;
-			}
-		}
-
-		$setting_value = '';
-		//default values
-		switch ( $setting_name ) {
-			case 'displayResults' :
-			case 'showResultsLink' :
-			case 'showPercentages' :
-			case 'showCounts' :
-				$setting_value = true;
-				break;
-			case 'blockRepeatVoters' :
-				$setting_value = false;
-				break;
-			case 'style' :
-				$setting_value = 'green';
-				break;
-			case 'cookie' :
-				$setting_value = '1 month';
-				break;
-		}
-
-		return $setting_value;
-	}
-
-	public function pre_render( $form ) {
-
-		$poll_fields = GFCommon::get_fields_by_type( $form, array( 'poll' ) );
-		if ( ! empty ( $poll_fields ) ) {
-			$form_css          = 'gpoll_enabled';
-			$show_results_link = $this->get_form_setting( $form, 'showResultsLink' );
-
-			if ( $show_results_link ) {
-				$form_css .= ' gpoll_show_results_link';
-			}
-
-			$block_repeat_voters = $this->get_form_setting( $form, 'blockRepeatVoters' );
-
-			if ( $block_repeat_voters && rgget( 'gf_page' ) != 'preview' ) {
-				$form_css .= ' gpoll_block_repeat_voters';
-			}
-
-			$form['cssClass'] = empty( $form['cssClass'] ) ? $form_css . ' gpoll' : $form_css . ' ' . $form['cssClass'];
-
-			foreach ( $form['fields'] as &$field ) {
-				if ( $field->type != 'poll' ) {
-					continue;
-				}
-
-				if ( GFFormsModel::get_input_type( $field ) == 'select' && empty( $field->placeholder ) ) {
-					$field->placeholder = __( 'Select one', 'gravityformspolls' );
-				}
-			}
-		}
-
-		return $form;
-	}
-
-
-	public function form_validation( $validation_result ) {
-		$form        = $validation_result['form'];
-		$poll_fields = GFCommon::get_fields_by_type( $form, array( 'poll' ) );
-		if ( empty ( $poll_fields ) ) {
-			return $validation_result;
-		}
-		$form_setting_block_repeat = $this->get_form_setting( $form, 'blockRepeatVoters' );
-		$field_values              = wp_parse_args( rgpost( 'gform_field_values' ) );
-		if ( $form_setting_block_repeat || ( isset( $field_values['gpoll_enabled'] ) && $field_values['gpoll_enabled'] == '1' && isset( $field_values['gpoll_cookie'] ) && false === empty( $field_values['gpoll_cookie'] ) ) ) {
-			$form_id = rgar( $form, 'id' );
-			if ( isset ( $_COOKIE[ 'gpoll_form_' . $form_id ] ) ) {
-				// set the form validation to false
-				$validation_result['is_valid'] = false;
-				foreach ( $form['fields'] as &$field ) {
-					if ( 'poll' == rgar( $field, 'type' ) ) {
-						$field['failed_validation']  = true;
-						$field['validation_message'] = __( 'Repeat voting is not allowed', 'gravityformspolls' );
-					}
-				}
-				$validation_result['form'] = $form;
-			}
-		}
-
-		return $validation_result;
-	}
-
-	public function render_poll_field_content( $content, $field, $value, $lead_id, $form_id ) {
-
-		if ( $lead_id === 0 && $field['type'] == 'poll' ) {
-
-			if ( rgar( $field, 'enableRandomizeChoices' ) ) {
-
-				//pass the HTML for the choices through DOMdocument to make sure we get the complete node
-				$dom     = new DOMDocument();
-				$content = '<?xml version="1.0" encoding="UTF-8"?>' . $content;
-				$loader = libxml_disable_entity_loader( true );
-				$errors = libxml_use_internal_errors( true );
-				$dom->loadHTML( $content );
-				libxml_clear_errors();
-				libxml_use_internal_errors( $errors );
-				libxml_disable_entity_loader( $loader );
-				$content = $dom->saveXML( $dom->documentElement );
-
-				//pick out the elements: LI for radio & checkbox, OPTION for select
-				$element_name = $field['inputType'] == 'select' ? 'select' : 'ul';
-				$nodes        = $dom->getElementsByTagName( $element_name )->item( 0 )->childNodes;
-
-				//cycle through the LI elements and swap them around randomly
-				$temp_str1 = 'gpoll_shuffle_placeholder1';
-				$temp_str2 = 'gpoll_shuffle_placeholder2';
-				for ( $i = $nodes->length - 1; $i >= 0; $i -- ) {
-					$n = rand( 0, $i );
-					if ( $i <> $n ) {
-						$i_str   = $dom->saveXML( $nodes->item( $i ) );
-						$n_str   = $dom->saveXML( $nodes->item( $n ) );
-						$content = str_replace( $i_str, $temp_str1, $content );
-						$content = str_replace( $n_str, $temp_str2, $content );
-						$content = str_replace( $temp_str2, $i_str, $content );
-						$content = str_replace( $temp_str1, $n_str, $content );
-					}
-				}
-				//snip off the tags that DOMdocument adds
-				$content = str_replace( '<html><body>', '', $content );
-				$content = str_replace( '</body></html>', '', $content );
-			}
-		}
-
-		return $content;
-	}
-
-	public function after_submission( $entry, $form ) {
-		if ( rgget( 'gf_page' ) == 'preview' ) {
-			return;
-		}
-
-		$set_cookie   = false;
-		$cookie       = '';
-		$field_values = array();
-		if ( isset( $_POST['gform_field_values'] ) ) {
-			$field_values = wp_parse_args( $_POST['gform_field_values'] );
-		}
-
-		$override = false;
-
-		if ( rgar( $field_values, 'gpoll_enabled' ) == '1' ) {
-			$show_results_link = rgar( $field_values, 'gpoll_show_results_link' );
-			$show_results_link = $show_results_link == '1' ? true : false;
-			$style             = rgar( $field_values, 'gpoll_style' );
-			$percentages       = rgar( $field_values, 'gpoll_percentages' );
-			$percentages       = $percentages == '1' ? true : false;
-			$counts            = rgar( $field_values, 'gpoll_counts' );
-			$counts            = $counts == '1' ? true : false;
-			$cookie            = $field_values['gpoll_cookie'];
-
-			$display_results = rgar( $field_values, 'gpoll_display_results' );
-			$display_results = $display_results == '1' ? true : false;
-
-			$display_confirmation = rgar( $field_values, 'gpoll_confirmation' );
-			$display_confirmation = $display_confirmation == '1' ? true : false;
-
-			$checksum = rgar( $field_values, 'gpoll_checksum' );
-			if ( $checksum == $this->generate_checksum( $display_results, $show_results_link, $cookie, $display_confirmation, $percentages, $counts, $style ) ) {
-				$set_cookie = true;
-				$override   = true;
-			}
-		}
-
-		if ( false === $override ) {
-			if ( $this->get_form_setting( $form, 'blockRepeatVoters' ) ) {
-				$set_cookie = true;
-				$cookie     = $this->get_form_setting( $form, 'cookie' );
-			}
-		}
-
-		if ( $set_cookie ) {
-			$form_id    = $form['id'];
-			$lead_id    = $entry['id'];
-			$server_tz  = date_default_timezone_get();
-			$browser_tz = rgar( $_COOKIE, 'gpoll-timezone' ); // in hours
-			if ( false === empty( $browser_tz ) ) {
-				date_default_timezone_set( $browser_tz );
-			}
-			$cookie_expiration = strtotime( $cookie );
-			date_default_timezone_set( $server_tz );
-			setcookie( 'gpoll_form_' . $form_id, $lead_id, $cookie_expiration, COOKIEPATH, COOKIE_DOMAIN );
-		}
-	}
-
-
+	/**
+	 * Localize the strings used by the scripts.
+	 */
 	public function localize_scripts() {
 
 		// Get current page protocol
@@ -753,321 +320,113 @@ class GFPolls extends GFAddOn {
 
 		//localisable strings for the js file
 		$strings = array(
-			'viewResults'   => __( 'View results', 'gravityformspolls' ),
-			'backToThePoll' => __( 'Back to the poll', 'gravityformspolls' )
+			'viewResults'   => esc_html__( 'View results', 'gravityformspolls' ),
+			'backToThePoll' => esc_html__( 'Back to the poll', 'gravityformspolls' )
 
 		);
 		wp_localize_script( 'gpoll_js', 'gpoll_strings', $strings );
 
 	}
 
-	/*-------- Admin functions ----------*/
 
-	public function add_tab_to_contact_detail( $tabs, $contact_id ) {
-		if ( $contact_id > 0 ) {
-			$tabs[] = array( 'name' => 'polls', 'label' => __( 'Poll Entries', 'gravityformspolls' ) );
-		}
+	// # RESULTS --------------------------------------------------------------------------------------------------------
 
-		return $tabs;
+	/**
+	 * Configure the survey results page.
+	 *
+	 * @return array
+	 */
+	public function get_results_page_config() {
+		return array(
+			'title'        => esc_html__( 'Poll Results', 'gravityformspolls' ),
+			'capabilities' => array( 'gravityforms_polls_results' ),
+			'callbacks'    => array(
+				'fields' => array( $this, 'results_fields' )
+			)
+		);
 	}
 
-	public function contacts_tab( $contact_id ) {
+	/**
+	 * Get all the poll fields for the current form.
+	 *
+	 * @param array $form The current form object.
+	 *
+	 * @return GF_Field[]
+	 */
+	public function results_fields( $form ) {
+		return GFAPI::get_fields_by_type( $form, array( 'poll' ) );
+	}
 
-		if ( false === empty( $contact_id ) ) :
-			$search_criteria['status']          = 'active';
-			$search_criteria['field_filters'][] = array( 'type' => 'meta', 'key' => 'gcontacts_contact_id', 'value' => $contact_id );
-			$form_ids                           = array();
-			$forms                              = GFFormsModel::get_forms( true );
-			foreach ( $forms as $form ) {
-				$form_meta   = GFFormsModel::get_form_meta( $form->id );
-				$poll_fields = GFCommon::get_fields_by_type( $form_meta, array( 'poll' ) );
-				if ( ! empty( $poll_fields ) ) {
-					$form_ids[] = $form->id;
-				}
+
+	// # MERGE TAGS -----------------------------------------------------------------------------------------------------
+
+	/**
+	 * Add the result merge tags to the merge tag drop downs in the admin.
+	 *
+	 * @param array $form The current form.
+	 *
+	 * @return array
+	 */
+	public function add_merge_tags( $form ) {
+		$poll_fields = GFAPI::get_fields_by_type( $form, array( 'poll' ) );
+
+		if ( empty( $poll_fields ) ) {
+			return $form;
+		}
+
+		foreach ( $poll_fields as $field ) {
+			$field_id     = $field->id;
+			$field_label  = $field->label;
+			$group        = $field->isRequired ? 'required' : 'optional';
+			$merge_tags[] = array(
+				'group' => $group,
+				'label' => $field_label . esc_html__( ': Poll Results', 'gravityformspolls' ),
+				'tag'   => "{gpoll:field={$field_id}}"
+			);
+		}
+
+		$merge_tags[] = array( 'group' => 'other', 'label' => esc_html__( 'All Poll Results', 'gravityformspolls' ), 'tag' => '{all_poll_results}' );
+
+		?>
+		<script type="text/javascript">
+			if (window.gform)
+				gform.addFilter("gform_merge_tags", "gpoll_add_merge_tags");
+			function gpoll_add_merge_tags(mergeTags, elementId, hideAllFields, excludeFieldTypes, isPrepop, option) {
+				if (isPrepop)
+					return mergeTags;
+				var customMergeTags = <?php echo json_encode( $merge_tags ); ?>;
+				jQuery.each(customMergeTags, function (i, customMergeTag) {
+					mergeTags[customMergeTag.group].tags.push({tag: customMergeTag.tag, label: customMergeTag.label});
+				});
+
+				return mergeTags;
 			}
-
-			if ( empty( $form_ids ) ) {
-				return;
-			}
-			$entries = GFAPI::get_entries( $form_ids, $search_criteria );
-
-			if ( empty( $entries ) ) :
-				_e( 'This contact has not submitted any poll entries yet.', 'gravityformspolls' );
-
-			else : ?>
-
-				<h3><span><?php _e( 'Poll Entries', 'gravityformspolls' ) ?></span></h3>
-				<div>
-					<table id="gcontacts-entry-list" class="widefat">
-						<tr class="gcontacts-entries-header">
-							<td>
-								<?php _e( 'Entry Id', 'gravityformspolls' ) ?>
-							</td>
-							<td>
-								<?php _e( 'Date', 'gravityformspolls' ) ?>
-							</td>
-							<td>
-								<?php _e( 'Form', 'gravityformspolls' ) ?>
-							</td>
-						</tr>
-						<?php
-						foreach ( $entries as $entry ) {
-							$form_id    = $entry['form_id'];
-							$form       = GFFormsModel::get_form_meta( $form_id );
-							$form_title = rgar( $form, 'title' );
-							$entry_id   = $entry['id'];
-							$entry_date = GFCommon::format_date( rgar( $entry, 'date_created' ), false );
-							$entry_url  = admin_url( "admin.php?page=gf_entries&view=entry&id={$form_id}&lid={$entry_id}" );
-
-							?>
-							<tr>
-								<td>
-									<a href="<?php echo $entry_url; ?>"><?php echo $entry_id; ?></a>
-								</td>
-								<td>
-									<?php echo $entry_date; ?>
-								</td>
-								<td>
-									<?php echo $form_title; ?>
-								</td>
-							</tr>
-						<?php
-						}
-						?>
-					</table>
-				</div>
-			<?php
-			endif;
-		endif;
+		</script>
+		<?php
+		//return the form object from the php hook
+		return $form;
 	}
 
-	public function cron_add_custom_schedule( $schedules ) {
-		// Adds once weekly to the existing schedules.
-		$custom_schedules = $this->get_custom_cron_schedule();
-		$schedules        = array_merge( $schedules, $custom_schedules );
-
-		return $schedules;
-	}
-
-	public function get_cron_recurrence() {
-
-		$custom_schedule = $this->get_custom_cron_schedule();
-
-		if ( empty( $custom_schedule ) ) {
-			$recurrence = 'hourly';
-		} else {
-			$recurrence = current( array_keys( $custom_schedule ) );
-		}
-
-		return $recurrence;
-	}
-
-
-	public function get_custom_cron_schedule() {
-
-		/**
-		 * Allows modification to the cron schedule for Polls
-		 *
-		 * @param array An array to allow modifications to the cron schedule or create a custom cron schedule
-		 */
-		$schedule = apply_filters( 'gform_polls_cron_schedule', array() );
-
-		return $schedule;
-	}
-
-	public static function remove_wp_cron_task() {
-		wp_clear_scheduled_hook( 'gform_polls_cron' );
-	}
-
-	// called only by the wp_cron task
-	public function wp_cron_task() {
-		$forms = GFFormsModel::get_forms( true );
-		foreach ( $forms as $form ) {
-			$form_id     = $form->id;
-			$form_meta   = $this->get_form_meta( $form_id );
-			$poll_fields = GFCommon::get_fields_by_type( $form_meta, array( 'poll' ) );
-			if ( empty ( $poll_fields ) )
-				continue;
-
-			$data_tmp = GFCache::get( 'gpoll_data_tmp_' . $form_id );
-			if ( false === $data_tmp ) {
-				$data = GFCache::get( 'gpoll_data_' . $form_id );
-				if ( false == $data || rgar( $data, 'incomplete' ) || false === isset( $data['execution_time'] ) || rgar( $data, 'expired' ) ) {
-					$data = $this->gpoll_get_data( $form_id );
-					$this->maybe_continue_cache_rebuild( $data, $form_id );
-				}
-			} else {
-				$data = $this->gpoll_get_data( $form_id, $data_tmp );
-				$this->maybe_continue_cache_rebuild( $data, $form_id );
-			}
-		}
-	}
-
-	// called only by the wp_cron job
-	public function maybe_continue_cache_rebuild( $data, $form_id ) {
-		if ( rgar( $data, 'incomplete' ) ) {
-			GFCache::set( 'gpoll_data_tmp_' . $form_id, $data, true );
-		} else {
-			GFCache::set( 'gpoll_data_' . $form_id, $data, true );
-			GFCache::delete( 'gpoll_data_tmp_' . $form_id );
-		}
-	}
-
-	// Called on entry created, entry updated, entry status changed and form saved.
-	// Not called by the wp_cron job.
-	public function maybe_update_cache( $form_id ) {
-		$key  = 'gpoll_data_' . $form_id;
-		$data = GFCache::get( $key );
-		if ( false === $data ) {
-			// nothing in the cache so start building it
-			$this->update_cache( $form_id );
-		} else {
-			if ( rgar( $data, 'execution_time' ) < 5 ) {
-				// update the cache now if the last execution was under 5 seconds
-				$this->update_cache( $form_id );
-			} else {
-				// mark the cache expired so the wp_cron job will begin recalculation
-				$data['expired'] = true;
-				GFCache::set( $key, $data, true );
-			}
-		}
-	}
-
-	public function display_entries_field_value( $value, $form_id, $field_id ) {
-		global $_form_metas;
-
-		$new_value = $value;
-
-		if ( ! isset( $_form_metas[ $form_id ] ) )
-			$_form_metas[ $form_id ] = RGFormsModel::get_form_meta( $form_id );
-
-		$form_meta = $_form_metas[ $form_id ];
-
-		$form_meta_field = RGFormsModel::get_field( $form_meta, $field_id );
-		if ( rgar( $form_meta_field, 'type' ) == 'poll' ) {
-			if ( $form_meta_field['inputType'] == 'radio' || $form_meta_field['inputType'] == 'select' ) {
-				$new_value = GFCommon::selection_display( $value, $form_meta_field, $currency = '', $use_text = true );
-			} elseif ( $form_meta_field['inputType'] == 'checkbox' ) {
-				$ary        = explode( ', ', $value );
-				$new_values = array();
-				foreach ( $ary as $response ) {
-					$new_values[] = GFCommon::selection_display( $response, $form_meta_field, $currency = '', $use_text = true );
-				}
-				$new_value = implode( ', ', $new_values );
-			}
-		}
-
-		return $new_value;
-	}
-
-	public function entry_created( $entry, $form ) {
-		$poll_fields = GFCommon::get_fields_by_type( $form, array( 'poll' ) );
-		if ( empty ( $poll_fields ) )
-			return;
-
-		//update cache
-		$form_id = $form['id'];
-		$this->maybe_update_cache( $form_id );
-
-	}
-
-	public function after_save_form( $form, $is_new ) {
-
-		$poll_fields = GFCommon::get_fields_by_type( $form, array( 'poll' ) );
-		if ( empty ( $poll_fields ) )
-			return;
-		//update cache
-		$form_id = $form['id'];
-
-		$this->maybe_update_cache( $form_id );
-	}
-
-	public function assign_title( $title, $field_type ) {
-		if ( $field_type == 'poll' )
-			return __( 'Poll', 'gravityformspolls' );
-
-		return $title;
-	}
-
-	public function get_form_meta( $form_id ) {
-		$form_metas = $this->_form_meta_by_id;
-
-		if ( empty( $form_metas ) ) {
-			$form_ids = array();
-			$forms    = RGFormsModel::get_forms();
-			foreach ( $forms as $form ) {
-				$form_ids[] = $form->id;
-			}
-
-			if ( method_exists( 'GFFormsModel', 'get_form_meta_by_id' ) )
-				$form_metas = GFFormsModel::get_form_meta_by_id( $form_ids );
-			else
-				$form_metas = GFFormsModel::get_forms_by_id( $form_ids ); //backwards compatiblity with <1.7
-
-			$this->_form_meta_by_id = $form_metas;
-		}
-		foreach ( $form_metas as $form_meta ) {
-			if ( $form_meta['id'] == $form_id )
-				return $form_meta;
-		}
-
-	}
-
-	public function update_entry_status( $lead_id ) {
-		//update cache
-		$lead        = RGFormsModel::get_lead( $lead_id );
-		$form_id     = $lead['form_id'];
-		$form        = GFFormsModel::get_form_meta( $form_id );
-		$poll_fields = GFCommon::get_fields_by_type( $form, array( 'poll' ) );
-		if ( empty ( $poll_fields ) )
-			return;
-		$this->maybe_update_cache( $form_id );
-
-	}
-
-	public function entry_updated( $form, $lead_id ) {
-		$poll_fields = GFCommon::get_fields_by_type( $form, array( 'poll' ) );
-		if ( empty ( $poll_fields ) )
-			return;
-
-		//update cache
-		$form_id = $form['id'];
-		$this->maybe_update_cache( $form_id );
-	}
-
-	public function update_cache( $form_id ) {
-
-		$gpoll_data = $this->gpoll_get_data( $form_id );
-		GFCache::set( 'gpoll_data_' . $form_id, $gpoll_data, true );
-
-		return $gpoll_data;
-	}
-
-	public function merge_tag_filter( $value, $merge_tag, $options, $field, $raw_value ) {
-
-		if ( $merge_tag == 'all_fields' && $field['type'] == 'poll' && is_array( $field['choices'] ) ) {
-			if ( $field['inputType'] == 'checkbox' ) {
-				//parse checkbox string (from $value variable) and replace values with text
-				foreach ( $raw_value as $key => $val ) {
-					$text  = RGFormsModel::get_choice_text( $field, $val );
-					$value = str_replace( $val, $text, $value );
-				}
-			} else {
-				//replacing value with text
-				$value = RGFormsModel::get_choice_text( $field, $value );
-			}
-		}
-
-		return $value;
-	}
-
+	/**
+	 * Replace the result merge tags.
+	 *
+	 * @param string $text The current text in which merge tags are being replaced.
+	 * @param array $form The current form object.
+	 * @param array $entry The current entry object.
+	 * @param bool $url_encode Whether or not to encode any URLs found in the replaced value.
+	 * @param bool $esc_html Whether or not to encode HTML found in the replaced value.
+	 * @param bool $nl2br Whether or not to convert newlines to break tags.
+	 * @param string $format The format requested for the location the merge is being used. Possible values: html, text or url.
+	 *
+	 * @return string
+	 */
 	public function render_merge_tag( $text, $form, $entry, $url_encode, $esc_html, $nl2br, $format ) {
 
 		if ( empty( $entry ) || empty( $form ) ) {
 			return $text;
 		}
 
-		$poll_fields = GFCommon::get_fields_by_type( $form, array( 'poll' ) );
+		$poll_fields = GFAPI::get_fields_by_type( $form, array( 'poll' ) );
 		if ( empty ( $poll_fields ) ) {
 			return $text;
 		}
@@ -1146,57 +505,802 @@ class GFPolls extends GFAddOn {
 
 	}
 
-	public function add_merge_tags( $form ) {
-		$poll_fields = GFCommon::get_fields_by_type( $form, array( 'poll' ) );
+	// # FORM RENDER & SUBMISSION ---------------------------------------------------------------------------------------
 
-		if ( empty( $poll_fields ) )
-			return $form;
+	/**
+	 * Helper for retrieving a form setting.
+	 *
+	 * @param array $form The current form object.
+	 * @param string $setting_name The property to be retrieved.
+	 *
+	 * @return bool|string
+	 */
+	public function get_form_setting( $form, $setting_name ) {
+		if ( false === empty( $form ) ) {
+			$settings = $this->get_form_settings( $form );
 
-		foreach ( $poll_fields as $field ) {
-			$field_id     = $field['id'];
-			$field_label  = $field['label'];
-			$group        = $field['isRequired'] ? 'required' : 'optional';
-			$merge_tags[] = array( 'group' => $group, 'label' => $field_label . ': Poll Results', 'tag' => "{gpoll:field={$field_id}}" );
+			// check for legacy form settings from a form exported from a previous version pre-framework
+			if ( empty( $settings ) && isset( $form['gpollDisplayResults'] ) ) {
+				$this->upgrade_form_settings( $form );
+			}
+
+			if ( isset( $settings[ $setting_name ] ) ) {
+				$setting_value = $settings[ $setting_name ];
+				if ( $setting_value == '1' ) {
+					$setting_value = true;
+				} elseif ( $setting_value == '0' ) {
+					$setting_value = false;
+				}
+
+				return $setting_value;
+			}
 		}
 
-		$merge_tags[] = array( 'group' => 'other', 'label' => 'All Poll Results', 'tag' => '{all_poll_results}' );
+		$setting_value = '';
+		//default values
+		switch ( $setting_name ) {
+			case 'displayResults' :
+			case 'showResultsLink' :
+			case 'showPercentages' :
+			case 'showCounts' :
+				$setting_value = true;
+				break;
+			case 'blockRepeatVoters' :
+				$setting_value = false;
+				break;
+			case 'style' :
+				$setting_value = 'green';
+				break;
+			case 'cookie' :
+				$setting_value = '1 month';
+				break;
+		}
 
-		?>
-		<script type="text/javascript">
-			if (window.gform)
-				gform.addFilter("gform_merge_tags", "gpoll_add_merge_tags");
-			function gpoll_add_merge_tags(mergeTags, elementId, hideAllFields, excludeFieldTypes, isPrepop, option) {
-				if (isPrepop)
-					return mergeTags;
-				var customMergeTags = <?php echo json_encode( $merge_tags ); ?>;
-				jQuery.each(customMergeTags, function (i, customMergeTag) {
-					mergeTags[customMergeTag.group].tags.push({ tag: customMergeTag.tag, label: customMergeTag.label });
-				});
+		return $setting_value;
+	}
 
-				return mergeTags;
+	/**
+	 * Updates the form object with the appropriate css classes and if necessary configures the select placeholder.
+	 *
+	 * @param array $form The for currently being processed for display.
+	 *
+	 * @return array
+	 */
+	public function pre_render( $form ) {
+
+		$poll_fields = GFAPI::get_fields_by_type( $form, array( 'poll' ) );
+		if ( ! empty ( $poll_fields ) ) {
+			$form_css          = 'gpoll_enabled';
+			$show_results_link = $this->get_form_setting( $form, 'showResultsLink' );
+
+			if ( $show_results_link ) {
+				$form_css .= ' gpoll_show_results_link';
 			}
-		</script>
-		<?php
-		//return the form object from the php hook
+
+			$block_repeat_voters = $this->get_form_setting( $form, 'blockRepeatVoters' );
+
+			if ( $block_repeat_voters && rgget( 'gf_page' ) != 'preview' ) {
+				$form_css .= ' gpoll_block_repeat_voters';
+			}
+
+			$form['cssClass'] = empty( $form['cssClass'] ) ? $form_css . ' gpoll' : $form_css . ' ' . $form['cssClass'];
+
+			foreach ( $form['fields'] as &$field ) {
+				if ( $field->type != 'poll' ) {
+					continue;
+				}
+
+				if ( $field->get_input_type() == 'select' && empty( $field->placeholder ) ) {
+					$field->placeholder = esc_html__( 'Select one', 'gravityformspolls' );
+				}
+			}
+		}
+
 		return $form;
 	}
 
+
+	/**
+	 * If necessary perform validation to prevent repeat voting.
+	 *
+	 * @param array $validation_result Contains the validation result, the form object, and the failed validation page number.
+	 *
+	 * @return array
+	 */
+	public function form_validation( $validation_result ) {
+		$form        = $validation_result['form'];
+		$poll_fields = GFAPI::get_fields_by_type( $form, array( 'poll' ) );
+		if ( empty ( $poll_fields ) ) {
+			return $validation_result;
+		}
+		$form_setting_block_repeat = $this->get_form_setting( $form, 'blockRepeatVoters' );
+		$field_values              = wp_parse_args( rgpost( 'gform_field_values' ) );
+		if ( $form_setting_block_repeat || ( isset( $field_values['gpoll_enabled'] ) && $field_values['gpoll_enabled'] == '1' && isset( $field_values['gpoll_cookie'] ) && false === empty( $field_values['gpoll_cookie'] ) ) ) {
+			$form_id = rgar( $form, 'id' );
+			if ( isset ( $_COOKIE[ 'gpoll_form_' . $form_id ] ) ) {
+				// set the form validation to false
+				$validation_result['is_valid'] = false;
+				foreach ( $form['fields'] as &$field ) {
+					if ( $field->type == 'poll' ) {
+						$field->failed_validation  = true;
+						$field->validation_message = esc_html__( 'Repeat voting is not allowed', 'gravityformspolls' );
+					}
+				}
+				$validation_result['form'] = $form;
+			}
+		}
+
+		return $validation_result;
+	}
+
+	/**
+	 * If necessary randomize the field choices.
+	 *
+	 * @param string $content The field content to be filtered.
+	 * @param GF_Field $field The field currently being processed for display.
+	 * @param string|array $value The field value. From default/dynamic population, $_POST, or a resumed incomplete submission.
+	 * @param int $entry_id The ID of the entry if the field is being displayed on the entry detail page.
+	 * @param int $form_id The ID of the current form.
+	 *
+	 * @return string
+	 */
+	public function render_poll_field_content( $content, $field, $value, $entry_id, $form_id ) {
+
+		if ( $entry_id === 0 && $field->type == 'poll' ) {
+
+			if ( $field->enableRandomizeChoices ) {
+
+				//pass the HTML for the choices through DOMdocument to make sure we get the complete node
+				$dom     = new DOMDocument();
+				$content = '<?xml version="1.0" encoding="UTF-8"?>' . $content;
+				$loader  = libxml_disable_entity_loader( true );
+				$errors  = libxml_use_internal_errors( true );
+				$dom->loadHTML( $content );
+				libxml_clear_errors();
+				libxml_use_internal_errors( $errors );
+				libxml_disable_entity_loader( $loader );
+				$content = $dom->saveXML( $dom->documentElement );
+
+				//pick out the elements: LI for radio & checkbox, OPTION for select
+				$element_name = $field->inputType == 'select' ? 'select' : 'ul';
+				$nodes        = $dom->getElementsByTagName( $element_name )->item( 0 )->childNodes;
+
+				//cycle through the LI elements and swap them around randomly
+				$temp_str1 = 'gpoll_shuffle_placeholder1';
+				$temp_str2 = 'gpoll_shuffle_placeholder2';
+				for ( $i = $nodes->length - 1; $i >= 0; $i -- ) {
+					$n = rand( 0, $i );
+					if ( $i <> $n ) {
+						$i_str   = $dom->saveXML( $nodes->item( $i ) );
+						$n_str   = $dom->saveXML( $nodes->item( $n ) );
+						$content = str_replace( $i_str, $temp_str1, $content );
+						$content = str_replace( $n_str, $temp_str2, $content );
+						$content = str_replace( $temp_str2, $i_str, $content );
+						$content = str_replace( $temp_str1, $n_str, $content );
+					}
+				}
+				//snip off the tags that DOMdocument adds
+				$content = str_replace( '<html><body>', '', $content );
+				$content = str_replace( '</body></html>', '', $content );
+			}
+		}
+
+		return $content;
+	}
+
+	/**
+	 * If necessary update the confirmation to include the results.
+	 *
+	 * @param string|array $confirmation The forms current confirmation.
+	 * @param array $form The form currently being processed.
+	 * @param array $lead The entry currently being processed.
+	 * @param bool $ajax Indicates if AJAX is enabled for this form.
+	 *
+	 * @return string|array
+	 */
+	public function display_confirmation( $confirmation, $form, $lead, $ajax ) {
+		$poll_fields = GFAPI::get_fields_by_type( $form, array( 'poll' ) );
+
+		if ( empty ( $poll_fields ) ) {
+			return $confirmation;
+		}
+
+		$form_id              = $form['id'];
+		$display_confirmation = false;
+		$display_results      = false;
+		$override             = false;
+
+		$field_values = array();
+		if ( isset( $_POST['gform_field_values'] ) ) {
+			$field_values = wp_parse_args( $_POST['gform_field_values'] );
+		}
+
+		// shortcode attributes override form settings
+		if ( rgar( $field_values, 'gpoll_enabled' ) == '1' ) {
+
+			$field_values      = wp_parse_args( $_POST['gform_field_values'] );
+			$show_results_link = rgar( $field_values, 'gpoll_show_results_link' );
+			$show_results_link = $show_results_link == '1' ? true : false;
+			$style             = rgar( $field_values, 'gpoll_style' );
+			$percentages       = rgar( $field_values, 'gpoll_percentages' );
+			$percentages       = $percentages == '1' ? true : false;
+			$counts            = rgar( $field_values, 'gpoll_counts' );
+			$counts            = $counts == '1' ? true : false;
+			$cookie            = rgar( $field_values, 'gpoll_cookie' );
+
+			$display_results = rgar( $field_values, 'gpoll_display_results' );
+			$display_results = $display_results == '1' ? true : false;
+
+			$display_confirmation = rgar( $field_values, 'gpoll_confirmation' );
+			$display_confirmation = $display_confirmation == '1' ? true : false;
+
+			$checksum = rgar( $field_values, 'gpoll_checksum' );
+			if ( $checksum == $this->generate_checksum( $display_results, $show_results_link, $cookie, $display_confirmation, $percentages, $counts, $style ) ) {
+				$override = true;
+			}
+
+		}
+
+
+		if ( false === $override ) {
+			$style       = $this->get_form_setting( $form, 'style' );
+			$percentages = $this->get_form_setting( $form, 'showPercentages' );
+			$counts      = $this->get_form_setting( $form, 'showCounts' );
+
+			$display_results      = $this->get_form_setting( $form, 'displayResults' );
+			$display_confirmation = true;
+		}
+
+		$submitted_fields = array();
+		foreach ( $poll_fields as $field ) {
+			$field_id    = $field->id;
+			$entry_value = RGFormsModel::get_lead_field_value( $lead, $field );
+			if ( is_array( $entry_value ) ) {
+				$entry_value = implode( '', $entry_value );
+			}
+			if ( false === empty( $entry_value ) ) {
+				$submitted_fields[] = $field_id;
+			}
+		}
+
+		if ( $display_confirmation && $display_results ) {
+			//confirmation message plus results
+
+			//override in the case of headers already sent or ajax = true
+			if ( is_array( $confirmation ) && array_key_exists( 'redirect', $confirmation ) ) {
+				$confirmation = '';
+			}
+
+			//override confirmation if it's a redirect
+			$str_pos = strpos( $confirmation, 'gformRedirect' );
+			if ( false !== $str_pos ) {
+				$confirmation = '';
+			}
+
+			$has_confirmation_wrapper = false !== strpos( $confirmation, 'gform_confirmation_wrapper' ) ? true : false;
+
+			if ( $has_confirmation_wrapper ) {
+				$confirmation = substr( $confirmation, 0, strlen( $confirmation ) - 6 );
+			} //remove the closing div of the wrapper
+
+			$has_confirmation_message = false !== strpos( $confirmation, 'gform_confirmation_message' ) ? true : false;
+
+			if ( $has_confirmation_message ) {
+				$confirmation = substr( $confirmation, 0, strlen( $confirmation ) - 6 );
+			} //remove the closing div of the message
+			else {
+				$confirmation .= "<div id='gforms_confirmation_message' class='gform_confirmation_message_{$form_id}'>";
+			}
+
+			$results = $this->gpoll_get_results( $form['id'], $submitted_fields, $style, $percentages, $counts, $lead );
+			$confirmation .= $results['summary'] . '</div>';
+
+			if ( $has_confirmation_wrapper ) {
+				$confirmation .= '</div>';
+			}
+
+		} elseif ( ! $display_confirmation && $display_results ) {
+
+			//only the results without the confirmation message
+			$results = $this->gpoll_get_results( $form['id'], $submitted_fields, $style, $percentages, $counts, $lead );
+
+			$results_summary = $results['summary'];
+			$confirmation    = sprintf( "<div id='gforms_confirmation_message' class='gform_confirmation_message_{$form_id}'>%s</div>", $results_summary );
+
+		} elseif ( ! $display_confirmation && ! $display_results ) {
+			$confirmation = "<div id='gforms_confirmation_message' class='gform_confirmation_message_{$form_id}'></div>";
+		}
+
+		return $confirmation;
+	} // end function gpoll_confirmation
+
+	/**
+	 * If necessary set a cookie to block repeat submissions.
+	 *
+	 * @param array $entry The current entry object.
+	 * @param array $form The current form object.
+	 */
+	public function after_submission( $entry, $form ) {
+		if ( rgget( 'gf_page' ) == 'preview' ) {
+			return;
+		}
+
+		$set_cookie   = false;
+		$cookie       = '';
+		$field_values = array();
+		if ( isset( $_POST['gform_field_values'] ) ) {
+			$field_values = wp_parse_args( $_POST['gform_field_values'] );
+		}
+
+		$override = false;
+
+		if ( rgar( $field_values, 'gpoll_enabled' ) == '1' ) {
+			$show_results_link = rgar( $field_values, 'gpoll_show_results_link' );
+			$show_results_link = $show_results_link == '1' ? true : false;
+			$style             = rgar( $field_values, 'gpoll_style' );
+			$percentages       = rgar( $field_values, 'gpoll_percentages' );
+			$percentages       = $percentages == '1' ? true : false;
+			$counts            = rgar( $field_values, 'gpoll_counts' );
+			$counts            = $counts == '1' ? true : false;
+			$cookie            = $field_values['gpoll_cookie'];
+
+			$display_results = rgar( $field_values, 'gpoll_display_results' );
+			$display_results = $display_results == '1' ? true : false;
+
+			$display_confirmation = rgar( $field_values, 'gpoll_confirmation' );
+			$display_confirmation = $display_confirmation == '1' ? true : false;
+
+			$checksum = rgar( $field_values, 'gpoll_checksum' );
+			if ( $checksum == $this->generate_checksum( $display_results, $show_results_link, $cookie, $display_confirmation, $percentages, $counts, $style ) ) {
+				$set_cookie = true;
+				$override   = true;
+			}
+		}
+
+		if ( false === $override ) {
+			if ( $this->get_form_setting( $form, 'blockRepeatVoters' ) ) {
+				$set_cookie = true;
+				$cookie     = $this->get_form_setting( $form, 'cookie' );
+			}
+		}
+
+		if ( $set_cookie ) {
+			$form_id    = $form['id'];
+			$lead_id    = $entry['id'];
+			$server_tz  = date_default_timezone_get();
+			$browser_tz = rgar( $_COOKIE, 'gpoll-timezone' ); // in hours
+			if ( false === empty( $browser_tz ) ) {
+				date_default_timezone_set( $browser_tz );
+			}
+			$cookie_expiration = strtotime( $cookie );
+			date_default_timezone_set( $server_tz );
+			setcookie( 'gpoll_form_' . $form_id, $lead_id, $cookie_expiration, COOKIEPATH, COOKIE_DOMAIN );
+		}
+	}
+
+
+	// # ENTRY RELATED --------------------------------------------------------------------------------------------------
+
+	/**
+	 * If the field is a Poll type radio, select or checkbox then replace the choice value with the choice text.
+	 *
+	 * @param string $value The field value.
+	 * @param GF_Field|null $field The field object being processed or null.
+	 *
+	 * @return string
+	 */
+	public function maybe_format_field_values( $value, $field ) {
+
+		if ( is_object( $field ) && $field->type == 'poll' ) {
+			switch ( $field->inputType ) {
+				case 'radio' :
+				case 'select' :
+					return RGFormsModel::get_choice_text( $field, $value );
+
+				case 'checkbox' :
+					if ( is_array( $value ) ) {
+						foreach ( $value as &$choice ) {
+							if ( ! empty( $choice ) ) {
+								$choice = RGFormsModel::get_choice_text( $field, $choice );
+							}
+						}
+					} else {
+						foreach ( $field->choices as $choice ) {
+							$val   = rgar( $choice, 'value' );
+							$text  = rgar( $choice, 'text' );
+							$value = str_replace( $val, $text, $value );
+						}
+					}
+			}
+		}
+
+		return $value;
+	}
+
+	/**
+	 * Format the Poll field values so they use the choice text instead of values before being passed to the third-party.
+	 *
+	 * @param string $value The field value.
+	 * @param array $form The form currently being processed.
+	 * @param array $entry The entry object currently being processed.
+	 * @param string $field_id The ID of the field currently being processed.
+	 *
+	 * @return string
+	 */
+	public function addon_field_value( $value, $form, $entry, $field_id, $slug ) {
+		if ( ! empty( $value ) ) {
+			$field = RGFormsModel::get_field( $form, $field_id );
+
+			return $this->maybe_format_field_values( $value, $field );
+		}
+
+		return $value;
+	}
+
+	/**
+	 * Format the Poll field values so they use the choice text instead of values.
+	 *
+	 * Used for the entry list page, the AWeber, Campaign Monitor, and MailChimp add-ons.
+	 *
+	 * @param string|array $value The field value.
+	 * @param int $form_id The ID of the form currently being processed.
+	 * @param string $field_id The ID of the field currently being processed.
+	 * @param array $entry The entry object currently being processed.
+	 *
+	 * @return string|array
+	 */
+	public function display_entries_field_value( $value, $form_id, $field_id, $entry ) {
+		if ( ! empty( $value ) ) {
+			global $_form_metas;
+
+			if ( ! isset( $_form_metas[ $form_id ] ) ) {
+				$_form_metas[ $form_id ] = RGFormsModel::get_form_meta( $form_id );
+			}
+
+			$form_meta = $_form_metas[ $form_id ];
+
+			$field = RGFormsModel::get_field( $form_meta, $field_id );
+
+			return $this->maybe_format_field_values( $value, $field );
+		}
+
+		return $value;
+	}
+
+	/**
+	 * Format the Poll field values for display on the entry detail page and print entry.
+	 *
+	 * @param string|array $value The field value.
+	 * @param GF_Field $field The field currently being processed.
+	 * @param array $entry The entry object currently being processed.
+	 * @param array $form The form object currently being processed.
+	 *
+	 * @return string|array
+	 */
+	public function display_poll_on_entry_detail( $value, $field, $entry, $form ) {
+
+		if ( $field->type == 'poll' ) {
+			if ( $field->is_entry_detail() ) {
+				$results                 = $this->gpoll_get_results( $form['id'], $field->id, 'green', true, true, $entry );
+				$new_value               = sprintf( '<div class="gpoll_entry">%s</div>', rgar( $results, 'summary' ) );
+				$this->gpoll_add_scripts = true;
+
+				//if original response is not in results display below
+				$selected_values  = $this->get_selected_values( $form['id'], $field->id, $entry );
+				$possible_choices = $this->get_possible_choices( $form['id'], $field->id );
+				foreach ( $selected_values as $selected_value ) {
+					if ( ! in_array( $selected_value, $possible_choices ) ) {
+						$new_value = sprintf( '%s<h2>%s</h2>%s', $new_value, esc_html__( 'Original Response', 'gravityformspolls' ), $value );
+						break;
+					}
+				}
+
+				return $new_value;
+			} elseif ( is_array( $field->choices ) ) {
+				if ( $field->inputType == 'checkbox' ) {
+					foreach ( $field->choices as $choice ) {
+						$val   = rgar( $choice, 'value' );
+						$text  = rgar( $choice, 'text' );
+						$value = str_replace( $val, $text, $value );
+					}
+				} else {
+					$value = RGFormsModel::get_choice_text( $field, $value );
+				}
+			}
+		}
+
+		return $value;
+	}
+
+	/**
+	 * Maybe update the poll results cache when the entry status is changed.
+	 *
+	 * @param int $entry_id The ID of the entry which was updated.
+	 */
+	public function update_entry_status( $entry_id ) {
+		$entry       = RGFormsModel::get_lead( $entry_id );
+		$form_id     = $entry['form_id'];
+		$form        = GFFormsModel::get_form_meta( $form_id );
+		$poll_fields = GFAPI::get_fields_by_type( $form, array( 'poll' ) );
+		if ( empty ( $poll_fields ) ) {
+			return;
+		}
+
+		$this->maybe_update_cache( $form_id );
+	}
+
+	/**
+	 * Maybe update the poll results cache when the entry is updated.
+	 *
+	 * @param array $form The current form object.
+	 * @param int $entry_id The ID of the entry which was updated.
+	 */
+	public function entry_updated( $form, $entry_id ) {
+		$poll_fields = GFAPI::get_fields_by_type( $form, array( 'poll' ) );
+		if ( empty ( $poll_fields ) ) {
+			return;
+		}
+
+		$form_id = $form['id'];
+		$this->maybe_update_cache( $form_id );
+	}
+
+	// # TO FRAMEWORK MIGRATION -----------------------------------------------------------------------------------------
+
+	/**
+	 * Checks if a previous version was installed and if the form settings need migrating to the framework structure.
+	 *
+	 * @param string $previous_version The version number of the previously installed version.
+	 */
+	public function upgrade( $previous_version ) {
+		$previous_is_pre_addon_framework = version_compare( $previous_version, '1.5.4', '<' );
+
+		if ( $previous_is_pre_addon_framework ) {
+			$forms = GFFormsModel::get_forms();
+			foreach ( $forms as $form ) {
+				$form_meta = GFFormsModel::get_form_meta( $form->id );
+				$this->upgrade_form_settings( $form_meta );
+			}
+		}
+	}
+
+	/**
+	 * Migrates the polls related form settings to the new structure.
+	 *
+	 * @param array $form The form object currently being processed.
+	 */
+	private function upgrade_form_settings( $form ) {
+		if ( false === isset( $form['gpollDisplayResults'] ) ) {
+			return;
+		}
+
+		$legacy_form_settings = array(
+			'gpollDisplayResults'    => 'displayResults',
+			'gpollShowResultsLink'   => 'showResultsLink',
+			'gpollShowPercentages'   => 'showPercentages',
+			'gpollShowCounts'        => 'showCounts',
+			'gpollBlockRepeatVoters' => 'blockRepeatVoters',
+			'gpollStyle'             => 'style',
+			'gpollCookie'            => 'cookie',
+		);
+
+		$new_settings = array();
+		foreach ( $legacy_form_settings as $legacy_key => $new_key ) {
+			if ( isset( $form[ $legacy_key ] ) ) {
+				$new_settings[ $new_key ] = $form[ $legacy_key ];
+				unset( $form[ $legacy_key ] );
+			}
+		}
+		if ( false === empty( $new_settings ) ) {
+			$form[ $this->_slug ] = $new_settings;
+			GFFormsModel::update_form_meta( $form['id'], $form );
+		}
+	}
+
+
+	// # FORM SETTINGS --------------------------------------------------------------------------------------------------
+
+	/**
+	 * Add the form settings tab.
+	 *
+	 * @param array $tabs The tabs to be displayed on the form settings page.
+	 * @param int $form_id The ID of the current form.
+	 *
+	 * @return array
+	 */
+	public function add_form_settings_menu( $tabs, $form_id ) {
+		$form        = $this->get_form_meta( $form_id );
+		$poll_fields = GFAPI::get_fields_by_type( $form, array( 'poll' ) );
+		if ( ! empty( $poll_fields ) ) {
+			$tabs[] = array( 'name' => 'gravityformspolls', 'label' => esc_html__( 'Polls', 'gravityformspolls' ) );
+		}
+
+		return $tabs;
+	}
+
+	/**
+	 * The settings fields to be rendered on the form settings page.
+	 *
+	 * @param array $form The current form object.
+	 *
+	 * @return array
+	 */
+	public function form_settings_fields( $form ) {
+
+		// check for legacy form settings from a form exported from a previous version pre-framework
+		$page = rgget( 'page' );
+		if ( 'gf_edit_forms' == $page && false === empty( $form_id ) ) {
+			$settings = $this->get_form_settings( $form );
+			if ( empty( $settings ) && isset( $form['gpollDisplayResults'] ) ) {
+				$this->upgrade_form_settings( $form );
+			}
+		}
+
+		return array(
+			array(
+				'title'  => esc_html__( 'Poll Settings', 'gravityformspolls' ),
+				'fields' => array(
+					array(
+						'label'   => esc_html__( 'Results', 'gravityformspolls' ),
+						'type'    => 'checkbox',
+						'name'    => 'displayResults',
+						'tooltip' => '<h6>' . esc_html__( 'Results', 'gravityformspolls' ) . '</h6>' . esc_html__( 'Select this option to display the results of submitted poll fields after the form is submitted.', 'gravityformspolls' ),
+						'choices' => array(
+							0 => array(
+								'label'         => esc_html__( 'Display results of submitted poll fields after voting', 'gravityformspolls' ),
+								'name'          => 'displayResults',
+								'default_value' => $this->get_form_setting( array(), 'displayResults' )
+							)
+						)
+					),
+					array(
+						'label'   => esc_html__( 'Results Link', 'gravityformspolls' ),
+						'type'    => 'checkbox',
+						'name'    => 'showResultsLink',
+						'tooltip' => '<h6>' . esc_html__( 'Results Link', 'gravityformspolls' ) . '</h6>' . esc_html__( 'Select this option to add a link to the form which allows the visitor to see the results without voting.', 'gravityformspolls' ),
+						'choices' => array(
+							0 => array(
+								'label'         => esc_html__( 'Add a poll results link to the form', 'gravityformspolls' ),
+								'name'          => 'showResultsLink',
+								'default_value' => $this->get_form_setting( array(), 'showResultsLink' ),
+							)
+						)
+					),
+					array(
+						'label'   => esc_html__( 'Percentages', 'gravityformspolls' ),
+						'type'    => 'checkbox',
+						'name'    => 'showPercentages',
+						'tooltip' => '<h6>' . esc_html__( 'Show Percentages', 'gravityformspolls' ) . '</h6>' . esc_html__( 'Show the percentage of the total votes for each choice.', 'gravityformspolls' ),
+						'choices' => array(
+							0 => array(
+								'label'         => esc_html__( 'Display percentages', 'gravityformspolls' ),
+								'name'          => 'showPercentages',
+								'default_value' => $this->get_form_setting( array(), 'showPercentages' )
+							)
+						)
+					),
+					array(
+						'label'   => esc_html__( 'Counts', 'gravityformspolls' ),
+						'type'    => 'checkbox',
+						'name'    => 'showCounts',
+						'tooltip' => '<h6>' . esc_html__( 'Show Counts', 'gravityformspolls' ) . '</h6>' . esc_html__( 'Show the total number of votes for each choice.', 'gravityformspolls' ),
+						'choices' => array(
+							0 => array(
+								'label'         => esc_html__( 'Display counts', 'gravityformspolls' ),
+								'name'          => 'showCounts',
+								'default_value' => $this->get_form_setting( array(), 'showCounts' )
+							)
+						)
+					),
+					array(
+						'label'         => esc_html__( 'Style', 'gravityformspolls' ),
+						'name'          => 'style',
+						'default_value' => $this->get_form_setting( array(), 'style' ),
+						'type'          => 'select',
+						'choices'       => array(
+							array( 'label' => esc_html__( 'Green', 'gravityformspolls' ), 'value' => 'green' ),
+							array( 'label' => esc_html__( 'Blue', 'gravityformspolls' ), 'value' => 'blue' ),
+							array( 'label' => esc_html__( 'Red', 'gravityformspolls' ), 'value' => 'red' ),
+							array( 'label' => esc_html__( 'Orange', 'gravityformspolls' ), 'value' => 'orange' ),
+						)
+					),
+					array(
+						'label'   => esc_html__( 'Block repeat voters', 'gravityformspolls' ),
+						'type'    => 'block_repeat_voters',
+						'name'    => 'blockRepeatVoters',
+						'tooltip' => '<h6>' . esc_html__( 'Block Repeat Voters', 'gravityformspolls' ) . '</h6>' . esc_html__( "Choose whether to allow visitors to vote more than once. Repeat voting is controlled by storing a cookie on the visitor's computer.", 'gravityformspolls' ),
+					),
+				)
+			),
+		);
+	}
+
+	/**
+	 * Define the properties and output the markup for the block_repeat_voters field type.
+	 */
+	public function settings_block_repeat_voters() {
+		$this->settings_radio(
+			array(
+				'label'         => esc_html__( 'Repeat Voters', 'gravityformspolls' ),
+				'name'          => 'blockRepeatVoters',
+				'class'         => 'gpoll-block-repeat-voters',
+				'default_value' => $this->get_form_setting( array(), 'blockRepeatVoters' ) ? '1' : '0',
+				'type'          => 'radio',
+				'choices'       => array(
+					array( 'label' => esc_html__( "Don't block repeat voting", 'gravityformspolls' ), 'value' => '0' ),
+					array( 'label' => esc_html__( 'Block repeat voting using cookie', 'gravityformspolls' ), 'value' => '1' ),
+				)
+			)
+		);
+
+		esc_html_e( 'Expires: ', 'gravityformspolls' );
+		$this->settings_select(
+			array(
+				'name'          => 'cookie',
+				'default_value' => $this->get_form_setting( array(), 'cookie' ),
+				'type'          => 'select',
+				'choices'       => array(
+					array( 'label' => esc_html__( 'Never', 'gravityformspolls' ), 'value' => '20 years' ),
+					array( 'label' => esc_html__( '1 hour', 'gravityformspolls' ), 'value' => '1 hour' ),
+					array( 'label' => esc_html__( '6 hours', 'gravityformspolls' ), 'value' => '6 hours' ),
+					array( 'label' => esc_html__( '12 hours', 'gravityformspolls' ), 'value' => '12 hours' ),
+					array( 'label' => esc_html__( '1 day', 'gravityformspolls' ), 'value' => '1 day' ),
+					array( 'label' => esc_html__( '1 week', 'gravityformspolls' ), 'value' => '1 week' ),
+					array( 'label' => esc_html__( '1 month', 'gravityformspolls' ), 'value' => '1 month' ),
+				)
+			)
+		);
+	}
+
+
+	// # FIELD SETTINGS -------------------------------------------------------------------------------------------------
+
+	/**
+	 * Add the gpoll_field class to the Poll field.
+	 *
+	 * @param string $classes The CSS classes to be filtered, separated by empty spaces.
+	 * @param GF_Field $field The field currently being processed.
+	 * @param array $form The form currently being processed.
+	 *
+	 * @return string
+	 */
+	public function add_custom_class( $classes, $field, $form ) {
+		if ( $field->type == 'poll' ) {
+			$classes .= ' gpoll_field';
+		}
+
+		return $classes;
+	}
+
+	/**
+	 * Add the tooltips for the Poll field.
+	 *
+	 * @param array $tooltips An associative array of tooltips where the key is the tooltip name and the value is the tooltip.
+	 *
+	 * @return array
+	 */
 	public function add_poll_field_tooltips( $tooltips ) {
 		//form settings
-		$tooltips['gpoll_form_settings_display_results']      = '<h6>' . __( 'Display Results After Voting', 'gravityformspolls' ) . '</h6>' . __( 'Select this to display the results of submitted poll fields.', 'gravityformspolls' );
-		$tooltips['gpoll_form_settings_display_confirmation'] = '<h6>' . __( 'Display Confirmation', 'gravityformspolls' ) . '</h6>' . __( 'Select this option to display the form confirmation message after the visitor has voted.', 'gravityformspolls' );
-		$tooltips['gpoll_form_settings_show_results_link']    = '<h6>' . __( 'Show Results Link', 'gravityformspolls' ) . '</h6>' . __( 'Add a link to the form which allows the visitor to see the results without voting.', 'gravityformspolls' );
-		$tooltips['gpoll_form_settings_show_percentages']     = '<h6>' . __( 'Show Percentages', 'gravityformspolls' ) . '</h6>' . __( 'Show the percentage of the total votes for each choice.', 'gravityformspolls' );
-		$tooltips['gpoll_form_settings_show_counts']          = '<h6>' . __( 'Show Counts', 'gravityformspolls' ) . '</h6>' . __( 'Show the total number of votes for each choice.', 'gravityformspolls' );
-		$tooltips['gpoll_form_settings_repeat_voters']        = '<h6>' . __( 'Repeat Voters', 'gravityformspolls' ) . '</h6>' . __( "Choose whether to allow visitors to vote more than once. Repeat voting is controlled by storing a cookie on the visitor's computer.", 'gravityformspolls' );
+		$tooltips['gpoll_form_settings_display_results']      = '<h6>' . esc_html__( 'Display Results After Voting', 'gravityformspolls' ) . '</h6>' . esc_html__( 'Select this to display the results of submitted poll fields.', 'gravityformspolls' );
+		$tooltips['gpoll_form_settings_display_confirmation'] = '<h6>' . esc_html__( 'Display Confirmation', 'gravityformspolls' ) . '</h6>' . esc_html__( 'Select this option to display the form confirmation message after the visitor has voted.', 'gravityformspolls' );
+		$tooltips['gpoll_form_settings_show_results_link']    = '<h6>' . esc_html__( 'Show Results Link', 'gravityformspolls' ) . '</h6>' . esc_html__( 'Add a link to the form which allows the visitor to see the results without voting.', 'gravityformspolls' );
+		$tooltips['gpoll_form_settings_show_percentages']     = '<h6>' . esc_html__( 'Show Percentages', 'gravityformspolls' ) . '</h6>' . esc_html__( 'Show the percentage of the total votes for each choice.', 'gravityformspolls' );
+		$tooltips['gpoll_form_settings_show_counts']          = '<h6>' . esc_html__( 'Show Counts', 'gravityformspolls' ) . '</h6>' . esc_html__( 'Show the total number of votes for each choice.', 'gravityformspolls' );
+		$tooltips['gpoll_form_settings_repeat_voters']        = '<h6>' . esc_html__( 'Repeat Voters', 'gravityformspolls' ) . '</h6>' . esc_html__( "Choose whether to allow visitors to vote more than once. Repeat voting is controlled by storing a cookie on the visitor's computer.", 'gravityformspolls' );
 
-		$tooltips['form_poll_question']           = '<h6>' . __( 'Poll Question', 'gravityformspolls' ) . '</h6>' . __( 'Enter the question you would like to ask the user. The user can then answer the question by selecting from the available choices.', 'gravityformspolls' );
-		$tooltips['form_poll_field_type']         = '<h6>' . __( 'Poll Type', 'gravityformspolls' ) . '</h6>' . __( "Select the field type you'd like to use for the poll.", 'gravityformspolls' );
-		$tooltips['form_field_randomize_choices'] = '<h6>' . __( 'Randomize Choices', 'gravityformspolls' ) . '</h6>' . __( 'Check the box to randomize the order in which the choices are displayed to the user. This setting affects only voting - it will not affect the order of the results.', 'gravityformspolls' );
+		$tooltips['form_poll_question']           = '<h6>' . esc_html__( 'Poll Question', 'gravityformspolls' ) . '</h6>' . esc_html__( 'Enter the question you would like to ask the user. The user can then answer the question by selecting from the available choices.', 'gravityformspolls' );
+		$tooltips['form_poll_field_type']         = '<h6>' . esc_html__( 'Poll Type', 'gravityformspolls' ) . '</h6>' . esc_html__( "Select the field type you'd like to use for the poll.", 'gravityformspolls' );
+		$tooltips['form_field_randomize_choices'] = '<h6>' . esc_html__( 'Randomize Choices', 'gravityformspolls' ) . '</h6>' . esc_html__( 'Check the box to randomize the order in which the choices are displayed to the user. This setting affects only voting - it will not affect the order of the results.', 'gravityformspolls' );
 
 		return $tooltips;
 	}
 
+	/**
+	 * Add the custom settings for the Poll fields to the fields general tab.
+	 *
+	 * @param int $position The position the settings should be located at.
+	 * @param int $form_id The ID of the form currently being edited.
+	 */
 	public function poll_field_settings( $position, $form_id ) {
 
 		//create settings on position 25 (right after Field Label)
@@ -1205,122 +1309,346 @@ class GFPolls extends GFAddOn {
 
 			<li class="poll_question_setting field_setting">
 				<label for="poll_question">
-					<?php _e( 'Poll Question', 'gravityformspolls' ); ?>
+					<?php esc_html_e( 'Poll Question', 'gravityformspolls' ); ?>
 					<?php gform_tooltip( 'form_poll_question' ); ?>
 				</label>
 				<input type="text" id="poll_question" class="fieldwidth-3" onkeyup="SetFieldLabel(this.value)"
-					   size="35" />
+				       size="35"/>
 			</li>
 
 			<li class="poll_field_type_setting field_setting">
 				<label for="poll_field_type">
-					<?php _e( 'Poll Type', 'gravityformspolls' ); ?>
+					<?php esc_html_e( 'Poll Type', 'gravityformspolls' ); ?>
 					<?php gform_tooltip( 'form_poll_field_type' ); ?>
 				</label>
 				<select id="poll_field_type"
-						onchange="if(jQuery(this).val() == '') return; jQuery('#field_settings').slideUp(function(){StartChangePollType(jQuery('#poll_field_type').val());});">
-					<option value="select"><?php _e( 'Drop Down', 'gravityformspolls' ); ?></option>
-					<option value="radio"><?php _e( 'Radio Buttons', 'gravityformspolls' ); ?></option>
-					<option value="checkbox"><?php _e( 'Checkboxes', 'gravityformspolls' ); ?></option>
+				        onchange="if(jQuery(this).val() == '') return; jQuery('#field_settings').slideUp(function(){StartChangePollType(jQuery('#poll_field_type').val());});">
+					<option value="select"><?php esc_html_e( 'Drop Down', 'gravityformspolls' ); ?></option>
+					<option value="radio"><?php esc_html_e( 'Radio Buttons', 'gravityformspolls' ); ?></option>
+					<option value="checkbox"><?php esc_html_e( 'Checkboxes', 'gravityformspolls' ); ?></option>
 
 				</select>
 
 			</li>
 
-		<?php
+			<?php
 		} elseif ( $position == 1368 ) {
 			//right after the other_choice_setting
 			?>
 			<li class="randomize_choices_setting field_setting">
 
 				<input type="checkbox" id="field_randomize_choices"
-					   onclick="var value = jQuery(this).is(':checked'); SetFieldProperty('enableRandomizeChoices', value); UpdateFieldChoices(GetInputType(field));" />
+				       onclick="var value = jQuery(this).is(':checked'); SetFieldProperty('enableRandomizeChoices', value); UpdateFieldChoices(GetInputType(field));"/>
 				<label for="field_randomize_choices" class="inline">
-					<?php _e( 'Randomize order of choices', 'gravityformspolls' ); ?>
+					<?php esc_html_e( 'Randomize order of choices', 'gravityformspolls' ); ?>
 					<?php gform_tooltip( 'form_field_randomize_choices' ) ?>
 				</label>
 
 			</li>
-		<?php
+			<?php
 		}
 	}
 
-	public function add_poll_field( $field_groups ) {
 
-		foreach ( $field_groups as &$group ) {
-			if ( $group['name'] == 'advanced_fields' ) {
-				$group['fields'][] = array( 'class' => 'button', 'value' => __( 'Poll', 'gravityformspolls' ), 'onclick' => "StartAddField('poll');", 'data-type' => 'poll' );
-				break;
+	// # AJAX FUNCTIONS ------------------------------------------------------------------------------------------------
+
+	/**
+	 * Handler for the gpoll_ajax AJAX request.
+	 * Returns the json encoded result for processing by gpoll.js.
+	 */
+	public function gpoll_ajax() {
+		$output = array();
+
+		$form_id = rgpost( 'formId' );
+		$form    = RGFormsModel::get_form_meta( $form_id );
+
+		$preview_results = rgpost( 'previewResults' );
+		$preview_results = $preview_results == '1' ? true : false;
+
+		$has_voted = isset ( $_COOKIE[ 'gpoll_form_' . $form_id ] );
+		$override  = false;
+		if ( rgpost( 'override' ) == 1 ) {
+			$show_results_link = rgpost( 'showResultsLink' ) == '1' ? true : false;
+
+			$display_results = rgpost( 'displayResults' ) == '1' ? true : false;
+			$confirmation    = rgpost( 'confirmation' ) == '1' ? true : false;
+			$percentages     = rgpost( 'percentages' ) == '1' ? true : false;
+			$counts          = rgpost( 'counts' ) == '1' ? true : false;
+			$cookie_duration = urldecode( rgpost( 'cookieDuration' ) );
+			$style           = rgpost( 'style' );
+			$checksum        = rgpost( 'checksum' );
+			if ( $checksum == $this->generate_checksum( $display_results, $show_results_link, $cookie_duration, $confirmation, $percentages, $counts, $style ) ) {
+				$override = true;
 			}
 		}
 
-		return $field_groups;
-	}
+		if ( false === $override ) {
+			$show_results_link   = $this->get_form_setting( $form, 'showResultsLink' );
+			$display_results     = $this->get_form_setting( $form, 'displayResults' );
+			$confirmation        = true;
+			$percentages         = $this->get_form_setting( $form, 'showPercentages' );
+			$counts              = $this->get_form_setting( $form, 'showCounts' );
+			$style               = $this->get_form_setting( $form, 'style' );
+			$block_repeat_voters = $this->get_form_setting( $form, 'blockRepeatVoters' );
 
-	public function display_poll_on_entry_detail( $value, $field, $lead, $form ) {
-		$new_value = '';
+			if ( $block_repeat_voters ) {
+				$cookie_duration = $this->get_form_setting( $form, 'cookie' );
+			} else {
+				$cookie_duration = '';
+			}
+		}
 
-		if ( $field['type'] == 'poll' ) {
-			$new_value .= '<div class="gpoll_entry">';
-			$results         = $this->gpoll_get_results( $form['id'], $field['id'], 'green', true, true, $lead );
-			$results_summary = $results['summary'];
-			$new_value .= $results_summary;
-			$new_value .= '</div>';
-			$this->gpoll_add_scripts = true;
 
-			//if orginal response is not in results display below
-			$selected_values  = array();
-			$selected_values  = $this->get_selected_values( $form['id'], $field['id'], $lead );
-			$possible_choices = array();
-			$possible_choices = $this->get_possible_choices( $form['id'], $field['id'] );
-			foreach ( $selected_values as $selected_value ) {
-				if ( ! in_array( $selected_value, $possible_choices ) ) {
-					$new_value = $new_value . __( '<h2>Original Response</h2>', 'gravityformspolls' ) . $value;
-					break;
+		$can_vote          = ( ! $has_voted ) || ( empty( $cookie_duration ) && $has_voted );
+		$output['canVote'] = $can_vote;
+
+		if ( $preview_results || ( false === $can_vote ) ) {
+
+			if ( '' === $show_results_link ) {
+				$show_results_link = true;
+			}
+
+			if ( ( $preview_results && $show_results_link ) || $display_results ) {
+				$results             = $this->gpoll_get_results( $form_id, '0', $style, $percentages, $counts );
+				$results_summary     = $results['summary'];
+				$output['resultsUI'] = $results_summary;
+			} else {
+				if ( $confirmation ) {
+					require_once( GFCommon::get_base_path() . '/form_display.php' );
+					$output['resultsUI'] = GFFormDisplay::handle_confirmation( $form, null );
+				} else {
+					$output['resultsUI'] = '';
 				}
 			}
 		} else {
-			$new_value = $value;
+			$output['resultsUI'] = '';
 		}
 
-		return $new_value;
+		echo json_encode( $output );
+		die();
+
 	}
 
-	public function display_poll_on_entry_print( $value, $field, $lead, $form ) {
 
-		$new_value = $value;
+	// # CRON JOB & RESULTS CACHE --------------------------------------------------------------------------------------
 
-		if ( $field['type'] == 'poll' && is_array( $field['choices'] ) ) {
-			if ( $field['inputType'] == 'checkbox' ) {
+	/**
+	 * Adds once weekly to the existing cron schedules.
+	 *
+	 * @param array $schedules An array of non-default cron schedules.
+	 *
+	 * @return array
+	 */
+	public function cron_add_custom_schedule( $schedules ) {
+		$custom_schedules = $this->get_custom_cron_schedule();
+		$schedules        = array_merge( $schedules, $custom_schedules );
 
-				foreach ( $field['choices'] as $choice ) {
+		return $schedules;
+	}
 
-					$val       = $choice['value'];
-					$text      = RGFormsModel::get_choice_text( $field, $val );
-					$new_value = str_replace( $val, $text, $new_value );
+
+	/**
+	 * Used for the second parameter of the wp_schedule_event function. How often the event should recur.
+	 *
+	 * @return string
+	 */
+	public function get_cron_recurrence() {
+
+		$custom_schedule = $this->get_custom_cron_schedule();
+
+		if ( empty( $custom_schedule ) ) {
+			$recurrence = 'hourly';
+		} else {
+			$recurrence = current( array_keys( $custom_schedule ) );
+		}
+
+		return $recurrence;
+	}
+
+
+	/**
+	 * Helper to allow the gform_polls_cron_schedule filter to be used to override the default cron schedule.
+	 *
+	 * @return array
+	 */
+	public function get_custom_cron_schedule() {
+
+		/**
+		 * Allows modification to the cron schedule for Polls
+		 *
+		 * @param array $schedule An array to allow modifications to the cron schedule or create a custom cron schedule
+		 */
+		$schedule = apply_filters( 'gform_polls_cron_schedule', array() );
+
+		return $schedule;
+	}
+
+	/**
+	 * Unschedule the cron when the plugin is deactivated.
+	 */
+	public static function remove_wp_cron_task() {
+		wp_clear_scheduled_hook( 'gform_polls_cron' );
+	}
+
+	/**
+	 * Called only by the wp_cron task.
+	 */
+	public function wp_cron_task() {
+		$forms = GFFormsModel::get_forms( true );
+		foreach ( $forms as $form ) {
+			$form_id     = $form->id;
+			$form_meta   = $this->get_form_meta( $form_id );
+			$poll_fields = GFAPI::get_fields_by_type( $form_meta, array( 'poll' ) );
+			if ( empty ( $poll_fields ) )
+				continue;
+
+			$data_tmp = GFCache::get( 'gpoll_data_tmp_' . $form_id );
+			if ( false === $data_tmp ) {
+				$data = GFCache::get( 'gpoll_data_' . $form_id );
+				if ( false == $data || rgar( $data, 'incomplete' ) || false === isset( $data['execution_time'] ) || rgar( $data, 'expired' ) ) {
+					$data = $this->gpoll_get_data( $form_id );
+					$this->maybe_continue_cache_rebuild( $data, $form_id );
 				}
 			} else {
-				//replacing value with text
-				$new_value = RGFormsModel::get_choice_text( $field, $value );
+				$data = $this->gpoll_get_data( $form_id, $data_tmp );
+				$this->maybe_continue_cache_rebuild( $data, $form_id );
 			}
 		}
-
-		return $new_value;
 	}
 
-	// adds gpoll_field class to poll fields
-	public function add_custom_class( $classes, $field, $form ) {
-		if ( $field['type'] == 'poll' ) {
-			$classes .= ' gpoll_field';
+	/**
+	 * Called only by the wp_cron job.
+	 *
+	 * @param array $data
+	 * @param int $form_id The form ID.
+	 */
+	public function maybe_continue_cache_rebuild( $data, $form_id ) {
+		if ( rgar( $data, 'incomplete' ) ) {
+			GFCache::set( 'gpoll_data_tmp_' . $form_id, $data, true );
+		} else {
+			GFCache::set( 'gpoll_data_' . $form_id, $data, true );
+			GFCache::delete( 'gpoll_data_tmp_' . $form_id );
+		}
+	}
+
+	/**
+	 * Called on entry created, entry updated, entry status changed and form saved.
+	 * Not called by the wp_cron job.
+	 *
+	 * @param int $form_id The form ID.
+	 */
+	public function maybe_update_cache( $form_id ) {
+		$key  = 'gpoll_data_' . $form_id;
+		$data = GFCache::get( $key );
+		if ( false === $data ) {
+			// nothing in the cache so start building it
+			$this->update_cache( $form_id );
+		} else {
+			if ( rgar( $data, 'execution_time' ) < 5 ) {
+				// update the cache now if the last execution was under 5 seconds
+				$this->update_cache( $form_id );
+			} else {
+				// mark the cache expired so the wp_cron job will begin recalculation
+				$data['expired'] = true;
+				GFCache::set( $key, $data, true );
+			}
+		}
+	}
+
+
+	/**
+	 * Update the results cache when an entry is created.
+	 *
+	 * @param array $entry The entry which was created.
+	 * @param array $form The current form.
+	 */
+	public function entry_created( $entry, $form ) {
+		$poll_fields = GFAPI::get_fields_by_type( $form, array( 'poll' ) );
+		if ( empty ( $poll_fields ) ) {
+			return;
 		}
 
-		return $classes;
+		//update cache
+		$form_id = $form['id'];
+		$this->maybe_update_cache( $form_id );
+
+	}
+
+	/**
+	 * Update the results cache when a form is saved.
+	 *
+	 * @param array $form The current form.
+	 * @param bool $is_new True if this is a new form being created. False if this is an existing form being updated.
+	 */
+	public function after_save_form( $form, $is_new ) {
+
+		$poll_fields = GFAPI::get_fields_by_type( $form, array( 'poll' ) );
+		if ( empty ( $poll_fields ) ) {
+			return;
+		}
+		//update cache
+		$form_id = $form['id'];
+
+		$this->maybe_update_cache( $form_id );
 	}
 
 
-	/*
-	Cycles through all entries, counts responses and returns an associative array with the data for each field. It's then optionally cached later according to the user settings.
-	*/
+	/**
+	 * Cache the form meta.
+	 *
+	 * @param int $form_id The form ID.
+	 *
+	 * @return mixed
+	 */
+	public function get_form_meta( $form_id ) {
+		$form_metas = $this->_form_meta_by_id;
+
+		if ( empty( $form_metas ) ) {
+			$form_ids = array();
+			$forms    = RGFormsModel::get_forms();
+			foreach ( $forms as $form ) {
+				$form_ids[] = $form->id;
+			}
+
+			if ( method_exists( 'GFFormsModel', 'get_form_meta_by_id' ) )
+				$form_metas = GFFormsModel::get_form_meta_by_id( $form_ids );
+			else
+				$form_metas = GFFormsModel::get_forms_by_id( $form_ids ); //backwards compatiblity with <1.7
+
+			$this->_form_meta_by_id = $form_metas;
+		}
+		foreach ( $form_metas as $form_meta ) {
+			if ( $form_meta['id'] == $form_id )
+				return $form_meta;
+		}
+
+	}
+
+
+	/**
+	 * Update the results cache.
+	 *
+	 * @param int $form_id The form ID.
+	 *
+	 * @return array
+	 */
+	public function update_cache( $form_id ) {
+
+		$gpoll_data = $this->gpoll_get_data( $form_id );
+		GFCache::set( 'gpoll_data_' . $form_id, $gpoll_data, true );
+
+		return $gpoll_data;
+	}
+
+	/**
+	 * Cycles through all entries, counts responses and returns an associative array with the data for each field.
+	 * It's then optionally cached later according to the user settings.
+	 *
+	 * @param int $form_id The form ID.
+	 * @param array $gpoll_data The poll results data.
+	 *
+	 * @return array
+	 */
 	public function gpoll_get_data( $form_id, $gpoll_data = array() ) {
 		$time_start         = microtime( true );
 		$max_execution_time = 20; //seconds
@@ -1348,16 +1676,17 @@ class GFPolls extends GFAddOn {
 
 			foreach ( $form_meta['fields'] as $field ) {
 
-				$fieldid = $field['id'];
+				$fieldid = $field->id;
 
-				if ( $field['type'] !== 'poll' )
+				if ( $field->type !== 'poll' ) {
 					continue;
+				}
 
 				$gpoll_field_data = array(
-					'field_label' => $field['label'],
+					'field_label' => $field->label,
 					'field_id'    => $fieldid,
-					'type'        => $field['type'],
-					'inputType'   => $field['inputType'],
+					'type'        => $field->type,
+					'inputType'   => $field->inputType,
 				);
 
 				$gpoll_data['fields'][ $field_counter ] = $gpoll_field_data;
@@ -1365,9 +1694,9 @@ class GFPolls extends GFAddOn {
 				$gpoll_input_data = array();
 
 				//for checkboxes
-				if ( $field['inputType'] == 'checkbox' ) {
+				if ( $field->inputType == 'checkbox' ) {
 					$input_counter = 0;
-					foreach ( $field['inputs'] as $input ) {
+					foreach ( $field->inputs as $input ) {
 						$inputid = str_replace( '.', '_', $input['id'] );
 
 						$gpoll_input_data = array(
@@ -1381,16 +1710,16 @@ class GFPolls extends GFAddOn {
 					//for radio & dropdowns
 
 					$choice_counter = 0;
-					if ( isset( $field['enableOtherChoice'] ) && $field['enableOtherChoice'] === true ) {
+					if ( $field->enableOtherChoice ) {
 
-						$choice_index = count( $field['choices'] );
-						$choices = $field['choices'];
-						$choices[ $choice_index ]['text'] = __( 'Other', 'gravityformspolls' );
+						$choice_index = count( $field->choices );
+						$choices = $field->choices;
+						$choices[ $choice_index ]['text'] = esc_html__( 'Other', 'gravityformspolls' );
 						$choices[ $choice_index ]['value'] = 'gpoll_other';
 						$field['choices'] = $choices;
 					}
 
-					foreach ( $field['choices'] as $choice ) {
+					foreach ( $field->choices as $choice ) {
 						$gpoll_input_data                                                = array(
 							'input_id' => "#choice_{$fieldid}_{$choice_counter}",
 							'label'    => $choice['text'],
@@ -1422,7 +1751,7 @@ class GFPolls extends GFAddOn {
 			//loop through each field currently on the form and count the entries for each choice
 			foreach ( $form_meta['fields'] as $field ) {
 
-				if ( $field['type'] !== 'poll' ) {
+				if ( $field->type !== 'poll' ) {
 					continue;
 				}
 
@@ -1443,12 +1772,12 @@ class GFPolls extends GFAddOn {
 				$gpoll_input_data = array();
 
 				// checkboxes store entries differently to radio & dropdowns
-				if ( $field['inputType'] == 'checkbox' ) {
+				if ( $field->inputType == 'checkbox' ) {
 					//for checkboxes
 
 					// loop through all the choices and count the entries for each choice
 					$input_counter = 0;
-					foreach ( $field['inputs'] as $input ) {
+					foreach ( $field->inputs as $input ) {
 
 						// running total of entries for each set of entries
 						if ( isset ( $gpoll_data['fields'][ $field_counter ]['inputs'][ $input_counter ]['total_entries'] ) ) {
@@ -1466,9 +1795,9 @@ class GFPolls extends GFAddOn {
 
 								// checkboxes store the key as [field number].[input index] (e.g. 2.1 or 2.2)
 								// so convert to integer to identify all the responses inside the lead object for this field id
-								if ( intval( $key ) == $field['id'] ) {
+								if ( intval( $key ) == $field->id ) {
 									//compare the user's response with the current choice
-									if ( $entry_value == $field['choices'][ $input_counter ]['value'] ) {
+									if ( $entry_value == $field->choices[ $input_counter ]['value'] ) {
 										// found a response for this choice so continue to the next lead
 										$total_entries ++;
 										break;
@@ -1486,7 +1815,7 @@ class GFPolls extends GFAddOn {
 						}
 
 						//store the data
-						$gpoll_data['fields'][ $field_counter ]['inputs'][ $input_counter ]['value']         = $field['choices'][ $input_counter ]['value'];
+						$gpoll_data['fields'][ $field_counter ]['inputs'][ $input_counter ]['value']         = $field->choices[ $input_counter ]['value'];
 						$gpoll_data['fields'][ $field_counter ]['inputs'][ $input_counter ]['total_entries'] = $total_entries;
 						$gpoll_data['fields'][ $field_counter ]['inputs'][ $input_counter ]['ratio']         = $ratio;
 						$input_counter += 1;
@@ -1505,7 +1834,7 @@ class GFPolls extends GFAddOn {
 //					}
 
 					// loop through each choice and count the responses
-					foreach ( $field['choices'] as $choice ) {
+					foreach ( $field->choices as $choice ) {
 
 						// running total of entries for each set of entries
 						if ( isset ( $gpoll_data['fields'][ $field_counter ]['inputs'][ $choice_counter ]['total_entries'] ) ) {
@@ -1524,24 +1853,27 @@ class GFPolls extends GFAddOn {
 							foreach ( $entries as $entry ) {
 								$entry_value = RGFormsModel::get_lead_field_value( $entry, $field );
 
-								if ( ! empty( $entry_value ) && ! in_array( $entry_value, $possible_choices ) )
+								if ( ! empty( $entry_value ) && ! in_array( $entry_value, $possible_choices ) ) {
 									$total_entries ++;
+								}
 							}
 						} else {
 
 							// count entries
 							foreach ( $entries as $entry ) {
 								$entry_value = RGFormsModel::get_lead_field_value( $entry, $field );
-								if ( $entry_value === rgar( $choice, 'value' ) )
+								if ( $entry_value === rgar( $choice, 'value' ) ) {
 									$total_entries ++;
+								}
 
 							}
 						}
 
 						// calculate the ratio of total number of responses counted to the total number of entries for this form
 						$ratio = 0;
-						if ( $field_total_entries != 0 )
+						if ( $field_total_entries != 0 ) {
 							$ratio = round( ( $total_entries / $field_total_entries * 100 ), $precision );
+						}
 
 
 						//store the data
@@ -1568,7 +1900,18 @@ class GFPolls extends GFAddOn {
 		return $gpoll_data;
 	} // end function gpoll_get_data
 
-	// returns the results in an array of HTML formatted data
+	/**
+	 * Returns the results in an array of HTML formatted data.
+	 *
+	 * @param int $formid The form ID.
+	 * @param string $display_field
+	 * @param string $style
+	 * @param bool $show_percentages
+	 * @param bool $show_counts
+	 * @param array $lead
+	 *
+	 * @return array
+	 */
 	public function gpoll_get_results( $formid, $display_field = '0' /* zero = all fields */, $style = 'green', $show_percentages = true, $show_counts = true, $lead = array() ) {
 
 		$gpoll_output = array();
@@ -1637,7 +1980,7 @@ class GFPolls extends GFAddOn {
 
 				// if the 'other' option is selected for this field
 				// add the psuedo-value 'gpoll_other' if responses are found that are not in the list of possible choices
-				if ( isset( $form_meta_field['enableOtherChoice'] ) && $form_meta_field['enableOtherChoice'] === true ) {
+				if ( $form_meta_field->enableOtherChoice ) {
 
 					foreach ( $selected_values as $selected_value ) {
 						if ( ! in_array( $selected_value, $possible_choices ) )
@@ -1685,7 +2028,15 @@ class GFPolls extends GFAddOn {
 
 	} //end function gpoll_get_results
 
-	// collect all the responses in the lead for this field and returns an array
+	/**
+	 * Collect all the responses in the lead for this field and returns an array.
+	 *
+	 * @param array $form_meta The current form meta.
+	 * @param int $fieldid The current field ID.
+	 * @param array $lead The current entry.
+	 *
+	 * @return array
+	 */
 	public function get_selected_values( $form_meta, $fieldid, $lead ) {
 
 		$selected_values = array();
@@ -1694,16 +2045,16 @@ class GFPolls extends GFAddOn {
 		//and add the selected values to the selected_values array
 		if ( is_array( $form_meta['fields'] ) ) {
 			foreach ( $form_meta['fields'] as $field ) {
-				if ( $field['id'] == $fieldid ) {
-					if ( $field['inputType'] == 'checkbox' ) {
-						for ( $i = 1; $i <= count( $field['inputs'] ); $i ++ ) {
+				if ( $field->id == $fieldid ) {
+					if ( $field->inputType == 'checkbox' ) {
+						for ( $i = 1; $i <= count( $field->inputs ); $i ++ ) {
 							$lead_index = 0;
 							$lead_index = $fieldid . '.' . $i;
 							if ( isset( $lead[ $lead_index ] ) && ! empty( $lead[ $lead_index ] ) )
 								array_push( $selected_values, $lead[ $lead_index ] );
 						}
 					} else {
-						for ( $i = 1; $i <= count( $field['choices'] ); $i ++ ) {
+						for ( $i = 1; $i <= count( $field->choices ); $i ++ ) {
 							$lead_index = $fieldid;
 							if ( isset( $lead[ $lead_index ] ) && ! empty( $lead[ $lead_index ] ) )
 								array_push( $selected_values, $lead[ $lead_index ] );
@@ -1717,6 +2068,14 @@ class GFPolls extends GFAddOn {
 		return $selected_values;
 	}
 
+	/**
+	 * Get the choice values for the specified field.
+	 *
+	 * @param array $form_meta The current form meta.
+	 * @param int $fieldid The current field ID.
+	 *
+	 * @return array
+	 */
 	public function get_possible_choices( $form_meta, $fieldid ) {
 
 		$possible_choices = array();
@@ -1725,8 +2084,8 @@ class GFPolls extends GFAddOn {
 		//and add the possible choices to the possible_choices array
 		if ( is_array( $form_meta['fields'] ) ) {
 			foreach ( $form_meta['fields'] as $field ) {
-				if ( $field['id'] == $fieldid ) {
-					foreach ( $field['choices'] as $possible_choice ) {
+				if ( $field->id == $fieldid ) {
+					foreach ( $field->choices as $possible_choice ) {
 						array_push( $possible_choices, rgar( $possible_choice, 'value' ) );
 					}
 
@@ -1736,114 +2095,19 @@ class GFPolls extends GFAddOn {
 		}
 	}
 
-	public function display_confirmation( $confirmation, $form, $lead, $ajax ) {
-		$poll_fields          = GFCommon::get_fields_by_type( $form, array( 'poll' ) );
-		$display_confirmation = false;
-		$display_results      = false;
-		if ( empty ( $poll_fields ) )
-			return $confirmation;
 
-		$form_id = $form['id'];
+	// # SHORTCODES ----------------------------------------------------------------------------------------------------
 
-		$override = false;
-
-		$field_values = array();
-		if ( isset( $_POST['gform_field_values'] ) )
-			$field_values = wp_parse_args( $_POST['gform_field_values'] );
-
-		// shortcode attributes override form settings
-		if ( rgar( $field_values, 'gpoll_enabled' ) == '1' ) {
-
-			$field_values      = wp_parse_args( $_POST['gform_field_values'] );
-			$show_results_link = rgar( $field_values, 'gpoll_show_results_link' );
-			$show_results_link = $show_results_link == '1' ? true : false;
-			$style             = rgar( $field_values, 'gpoll_style' );
-			$percentages       = rgar( $field_values, 'gpoll_percentages' );
-			$percentages       = $percentages == '1' ? true : false;
-			$counts            = rgar( $field_values, 'gpoll_counts' );
-			$counts            = $counts == '1' ? true : false;
-			$cookie            = rgar( $field_values, 'gpoll_cookie' );
-
-			$display_results = rgar( $field_values, 'gpoll_display_results' );
-			$display_results = $display_results == '1' ? true : false;
-
-			$display_confirmation = rgar( $field_values, 'gpoll_confirmation' );
-			$display_confirmation = $display_confirmation == '1' ? true : false;
-
-			$checksum = rgar( $field_values, 'gpoll_checksum' );
-			if ( $checksum == $this->generate_checksum( $display_results, $show_results_link, $cookie, $display_confirmation, $percentages, $counts, $style ) )
-				$override = true;
-
-		}
-
-
-		if ( false === $override ) {
-			$style       = $this->get_form_setting( $form, 'style' );
-			$percentages = $this->get_form_setting( $form, 'showPercentages' );
-			$counts      = $this->get_form_setting( $form, 'showCounts' );
-
-			$display_results      = $this->get_form_setting( $form, 'displayResults' );
-			$display_confirmation = true;
-		}
-
-		$submitted_fields = array();
-		foreach ( $poll_fields as $field ) {
-			$field_id    = $field['id'];
-			$entry_value = RGFormsModel::get_lead_field_value( $lead, $field );
-			if ( is_array( $entry_value ) )
-				$entry_value = implode( '', $entry_value );
-			if ( false === empty( $entry_value ) )
-				$submitted_fields[] = $field_id;
-		}
-
-		if ( $display_confirmation && $display_results ) {
-			//confirmation message plus results
-
-			//override in the case of headers already sent or ajax = true
-			if ( is_array( $confirmation ) && array_key_exists( 'redirect', $confirmation ) )
-				$confirmation = '';
-
-			//override confirmation if it's a redirect
-			$str_pos = strpos( $confirmation, 'gformRedirect' );
-			if ( false !== $str_pos )
-				$confirmation = '';
-
-			$has_confirmation_wrapper = false !== strpos( $confirmation, 'gform_confirmation_wrapper' ) ? true : false;
-
-			if ( $has_confirmation_wrapper )
-				$confirmation = substr( $confirmation, 0, strlen( $confirmation ) - 6 ); //remove the closing div of the wrapper
-
-			$has_confirmation_message = false !== strpos( $confirmation, 'gform_confirmation_message' ) ? true : false;
-
-			if ( $has_confirmation_message )
-				$confirmation = substr( $confirmation, 0, strlen( $confirmation ) - 6 ); //remove the closing div of the message
-			else
-				$confirmation .= "<div id='gforms_confirmation_message' class='gform_confirmation_message_{$form_id}'>";
-
-			$results = $this->gpoll_get_results( $form['id'], $submitted_fields, $style, $percentages, $counts, $lead );
-			$confirmation .= $results['summary'] . '</div>';
-
-			if ( $has_confirmation_wrapper )
-				$confirmation .= '</div>';
-
-		} elseif ( ! $display_confirmation && $display_results ) {
-
-			//only the results without the confirmation message
-			$results = $this->gpoll_get_results( $form['id'], $submitted_fields, $style, $percentages, $counts, $lead );
-
-			$results_summary = $results['summary'];
-			$confirmation    = sprintf( "<div id='gforms_confirmation_message' class='gform_confirmation_message_{$form_id}'>%s</div>", $results_summary );
-
-		} elseif ( ! $display_confirmation && ! $display_results ) {
-			$confirmation = "<div id='gforms_confirmation_message' class='gform_confirmation_message_{$form_id}'></div>";
-		}
-
-		return $confirmation;
-	} // end function gpoll_confirmation
-
-	//displays the form and specifies hidden form values to enable and configure the poll.
-	//if the cookie is already set then display the results.
-
+	/**
+	 * Displays the form and specifies hidden form values to enable and configure the poll.
+	 * If the cookie is already set then display the results.
+	 *
+	 * @param $string
+	 * @param $attributes
+	 * @param $content
+	 *
+	 * @return mixed|null|string|void
+	 */
 	function poll_shortcode( $string, $attributes, $content ) {
 
 		extract(
@@ -1878,7 +2142,7 @@ class GFPolls extends GFAddOn {
 
 		$confirmation = strtolower( $confirmation ) == 'false' ? false : true;
 		if ( ! empty( $cookie ) && $cookie_expiration_date <= $currentDate ) {
-			return sprintf( __( 'Gravity Forms Polls Add-on Shortcode error: Please enter a valid date or time period for the cookie expiration cookie_expiration_date: %s', 'gravityformspolls' ), $cookie_expiration_date );
+			return sprintf( esc_html__( 'Gravity Forms Polls Add-on Shortcode error: Please enter a valid date or time period for the cookie expiration cookie_expiration_date: %s', 'gravityformspolls' ), $cookie_expiration_date );
 		}
 
 		$percentages       = strtolower( $percentages ) == 'false' ? false : true;
@@ -1905,7 +2169,7 @@ class GFPolls extends GFAddOn {
 			return;
 		}
 
-		$poll_fields = GFCommon::get_fields_by_type( $form, array( 'poll' ) );
+		$poll_fields = GFAPI::get_fields_by_type( $form, array( 'poll' ) );
 
 		if ( empty( $poll_fields ) ) {
 			return;
@@ -1981,64 +2245,64 @@ class GFPolls extends GFAddOn {
 	function add_polls_shortcode_ui_action( $actions ) {
 		$actions[] = array(
 			'polls' => array(
-				'label' => __( 'Polls', 'gravityformspolls' ),
+				'label' => esc_html__( 'Polls', 'gravityformspolls' ),
 				'attrs' => array(
 					array(
-						'label'       => __( 'Style', 'gravityformspolls' ),
-						'attr'        => 'style',
-						'type'        => 'select',
-						'default'     => 'green',
-						'options'     => array(
-							'green'  => __( 'Green', 'gravityformspolls' ),
-							'red'    => __( 'Red', 'gravityformspolls' ),
-							'orange' => __( 'Orange', 'gravityformspolls' ),
-							'blue'   => __( 'Blue', 'gravityformspolls' ),
+						'label'   => esc_html__( 'Style', 'gravityformspolls' ),
+						'attr'    => 'style',
+						'type'    => 'select',
+						'default' => 'green',
+						'options' => array(
+							'green'  => esc_html__( 'Green', 'gravityformspolls' ),
+							'red'    => esc_html__( 'Red', 'gravityformspolls' ),
+							'orange' => esc_html__( 'Orange', 'gravityformspolls' ),
+							'blue'   => esc_html__( 'Blue', 'gravityformspolls' ),
 						),
-						'tooltip' => __( 'The Add-On currently supports 4 built in styles: red, green, orange, blue. Defaults to "green".', 'gravityformspolls' )
+						'tooltip' => esc_html__( 'The Add-On currently supports 4 built in styles: red, green, orange, blue. Defaults to "green".', 'gravityformspolls' )
 					),
 					array(
-						'label'   => __( 'Mode', 'gravityformspolls' ),
+						'label'   => esc_html__( 'Mode', 'gravityformspolls' ),
 						'attr'    => 'mode',
 						'type'    => 'select',
-						'default'     => 'poll',
+						'default' => 'poll',
 						'options' => array(
 							'poll'    => 'Poll',
 							'results' => 'Results',
 						)
 					),
 					array(
-						'label'   => __( 'Cookie', 'gravityformspolls' ),
+						'label'   => esc_html__( 'Cookie', 'gravityformspolls' ),
 						'attr'    => 'cookie',
 						'type'    => 'text',
-						'tooltip' => __( 'Enables blocking of repeat voters. You enable this by passing a defined time period. Available time periods are: 1 day, 1 week, 1 month, or a specific date in the YYYY-MM-DD date format. Defaults to an empty string, which means no repeat voters are blocked.', 'gravityformspolls' )
+						'tooltip' => esc_html__( 'Enables blocking of repeat voters. You enable this by passing a defined time period. Available time periods are: 1 day, 1 week, 1 month, or a specific date in the YYYY-MM-DD date format. Defaults to an empty string, which means no repeat voters are blocked.', 'gravityformspolls' )
 					),
 					array(
-						'label'       => __( 'Results link', 'gravityformspolls' ),
-						'attr'        => 'show_results_link',
-						'type'        => 'checkbox',
-						'default'     => 'true',
-						'tooltip' => __( 'Display a link to view poll results without submitting the form? Supported values are: true, false. Defaults to "true".', 'gravityformspolls' )
+						'label'   => esc_html__( 'Results link', 'gravityformspolls' ),
+						'attr'    => 'show_results_link',
+						'type'    => 'checkbox',
+						'default' => 'true',
+						'tooltip' => esc_html__( 'Display a link to view poll results without submitting the form? Supported values are: true, false. Defaults to "true".', 'gravityformspolls' )
 					),
 					array(
-						'label'       => __( 'Display Results', 'gravityformspolls' ),
-						'attr'        => 'display_results',
-						'type'        => 'checkbox',
-						'default'     => 'true',
-						'tooltip' => __( 'Display poll results automatically when the form is submitted? Supported values are: true, false. Defaults to "true".', 'gravityformspolls' )
+						'label'   => esc_html__( 'Display Results', 'gravityformspolls' ),
+						'attr'    => 'display_results',
+						'type'    => 'checkbox',
+						'default' => 'true',
+						'tooltip' => esc_html__( 'Display poll results automatically when the form is submitted? Supported values are: true, false. Defaults to "true".', 'gravityformspolls' )
 					),
 					array(
-						'label'       => __( 'Display Percentages', 'gravityformspolls' ),
-						'attr'        => 'percentages',
-						'type'        => 'checkbox',
-						'default'     => 'true',
-						'tooltip' => __( 'Display results percentages as part of results? Supported values are: true, false. Defaults to "true".', 'gravityformspolls' )
+						'label'   => esc_html__( 'Display Percentages', 'gravityformspolls' ),
+						'attr'    => 'percentages',
+						'type'    => 'checkbox',
+						'default' => 'true',
+						'tooltip' => esc_html__( 'Display results percentages as part of results? Supported values are: true, false. Defaults to "true".', 'gravityformspolls' )
 					),
 					array(
-						'label'       => __( 'Display Counts', 'gravityformspolls' ),
-						'attr'        => 'counts',
-						'type'        => 'checkbox',
-						'default'     => 'true',
-						'tooltip' => __( 'Display number of times each choice has been selected when displaying results? Supported values are: true, false. Defaults to "true".', 'gravityformspolls' )
+						'label'   => esc_html__( 'Display Counts', 'gravityformspolls' ),
+						'attr'    => 'counts',
+						'type'    => 'checkbox',
+						'default' => 'true',
+						'tooltip' => esc_html__( 'Display number of times each choice has been selected when displaying results? Supported values are: true, false. Defaults to "true".', 'gravityformspolls' )
 					),
 				),
 			)
@@ -2048,5 +2312,87 @@ class GFPolls extends GFAddOn {
 		return $actions;
 	}
 
+	// # CONTACTS INTEGRATION -------------------------------------------------------------------------------------------
+
+	public function add_tab_to_contact_detail( $tabs, $contact_id ) {
+		if ( $contact_id > 0 ) {
+			$tabs[] = array( 'name' => 'polls', 'label' => __( 'Poll Entries', 'gravityformspolls' ) );
+		}
+
+		return $tabs;
+	}
+
+	public function contacts_tab( $contact_id ) {
+
+		if ( false === empty( $contact_id ) ) :
+			$search_criteria['status'] = 'active';
+			$search_criteria['field_filters'][] = array( 'type'  => 'meta',
+			                                             'key'   => 'gcontacts_contact_id',
+			                                             'value' => $contact_id
+			);
+			$form_ids                           = array();
+			$forms                              = GFFormsModel::get_forms( true );
+			foreach ( $forms as $form ) {
+				$form_meta   = GFFormsModel::get_form_meta( $form->id );
+				$poll_fields = GFAPI::get_fields_by_type( $form_meta, array( 'poll' ) );
+				if ( ! empty( $poll_fields ) ) {
+					$form_ids[] = $form->id;
+				}
+			}
+
+			if ( empty( $form_ids ) ) {
+				return;
+			}
+			$entries                   = GFAPI::get_entries( $form_ids, $search_criteria );
+
+			if ( empty( $entries ) ) :
+				esc_html_e( 'This contact has not submitted any poll entries yet.', 'gravityformspolls' );
+
+			else : ?>
+
+				<h3><span><?php esc_html_e( 'Poll Entries', 'gravityformspolls' ) ?></span></h3>
+				<div>
+					<table id="gcontacts-entry-list" class="widefat">
+						<tr class="gcontacts-entries-header">
+							<td>
+								<?php esc_html_e( 'Entry Id', 'gravityformspolls' ) ?>
+							</td>
+							<td>
+								<?php esc_html_e( 'Date', 'gravityformspolls' ) ?>
+							</td>
+							<td>
+								<?php esc_html_e( 'Form', 'gravityformspolls' ) ?>
+							</td>
+						</tr>
+						<?php
+						foreach ( $entries as $entry ) {
+							$form_id    = $entry['form_id'];
+							$form       = GFFormsModel::get_form_meta( $form_id );
+							$form_title = rgar( $form, 'title' );
+							$entry_id   = $entry['id'];
+							$entry_date = GFCommon::format_date( rgar( $entry, 'date_created' ), false );
+							$entry_url  = admin_url( "admin.php?page=gf_entries&view=entry&id={$form_id}&lid={$entry_id}" );
+
+							?>
+							<tr>
+								<td>
+									<a href="<?php echo $entry_url; ?>"><?php echo $entry_id; ?></a>
+								</td>
+								<td>
+									<?php echo $entry_date; ?>
+								</td>
+								<td>
+									<?php echo $form_title; ?>
+								</td>
+							</tr>
+							<?php
+						}
+						?>
+					</table>
+				</div>
+				<?php
+			endif;
+		endif;
+	}
 
 } //end class GFPolls

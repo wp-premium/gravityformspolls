@@ -2,14 +2,14 @@
 /*
 Plugin Name: Gravity Forms Polls Add-On
 Description: Polls Add-on for Gravity Forms
-Version: 2.4
+Version: 3.0
 Author: Rocketgenius
 Author URI: http://www.rocketgenius.com
 Text Domain: gravityformspolls
 Domain Path: /languages
 
 ------------------------------------------------------------------------
-Copyright 2012-2015 Rocketgenius Inc.
+Copyright 2012-2016 Rocketgenius Inc.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 */
 
-define( 'GF_POLLS_VERSION', '2.4' );
+define( 'GF_POLLS_VERSION', '3.0' );
 
 add_action( 'gform_loaded', array( 'GF_Polls_Bootstrap', 'load' ), 5 );
 
