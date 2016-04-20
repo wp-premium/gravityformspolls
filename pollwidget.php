@@ -280,7 +280,7 @@ if(!class_exists("GFPollsPollWidget")){
                     <input type="checkbox" name="<?php echo $this->get_field_name( 'showdescription' ); ?>" id="<?php echo $this->get_field_id( 'showdescription' ); ?>" <?php checked($instance['showdescription']); ?> value="1"/> <label for="<?php echo $this->get_field_id( 'showdescription' ); ?>"><?php _e("Display form description", "gravityformspolls"); ?></label><br/>
                 </p>
                 <p>
-                    <a href="javascript: var obj = jQuery('.gf_widget_advanced'); if(!obj.is(':visible')) {var a = obj.show('slow');} else {var a = obj.hide('slow');}"><?php _e("advanced options", "gravityformspolls"); ?></a>
+                    <a href="javascript: var obj = jQuery('.gf_widget_advanced'); if(!obj.is(':visible')) {var a = obj.show('slow');} else {var a = obj.hide('slow');}"><?php _e("Advanced Options", "gravityformspolls"); ?></a>
                 </p>
 
                 <p class="gf_widget_advanced" style="display:none;">
