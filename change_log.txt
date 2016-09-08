@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------
+Version 3.1
+    - Updated field general settings label classes for consistency with GF2.0+.
+    - Fixed an issue with the "other" choice feature on the radio type field when saving the form.
+    - Fixed a layout issue in the form editor when the 'Randomize order of choices' setting is enabled.
+
+---------------------------------------------------------------------
 Version 3.0
     - Added support for Gravity Forms 2.0.0
     - Added GF_Field_Poll.
