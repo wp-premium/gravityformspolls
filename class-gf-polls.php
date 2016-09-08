@@ -646,7 +646,7 @@ class GFPolls extends GFAddOn {
 	 */
 	public function render_poll_field_content( $content, $field, $value, $entry_id, $form_id ) {
 
-		if ( $entry_id === 0 && $field->type == 'poll' ) {
+		if ( $entry_id === 0 && $field->type == 'poll' && ! $this->is_form_editor() ) {
 
 			if ( $field->enableRandomizeChoices ) {
 
@@ -1308,7 +1308,7 @@ class GFPolls extends GFAddOn {
 			?>
 
 			<li class="poll_question_setting field_setting">
-				<label for="poll_question">
+				<label for="poll_question" class="section_label">
 					<?php esc_html_e( 'Poll Question', 'gravityformspolls' ); ?>
 					<?php gform_tooltip( 'form_poll_question' ); ?>
 				</label>
@@ -1317,7 +1317,7 @@ class GFPolls extends GFAddOn {
 			</li>
 
 			<li class="poll_field_type_setting field_setting">
-				<label for="poll_field_type">
+				<label for="poll_field_type" class="section_label">
 					<?php esc_html_e( 'Poll Type', 'gravityformspolls' ); ?>
 					<?php gform_tooltip( 'form_poll_field_type' ); ?>
 				</label>
@@ -1652,10 +1652,19 @@ class GFPolls extends GFAddOn {
 	public function gpoll_get_data( $form_id, $gpoll_data = array() ) {
 		$time_start         = microtime( true );
 		$max_execution_time = 20; //seconds
-		$form_meta          = RGFormsModel::get_form_meta( $form_id );
-		$form_meta          = apply_filters( "gform_polls_form_pre_results_$form_id", apply_filters( 'gform_polls_form_pre_results', $form_meta ) );
 		$totals             = RGFormsModel::get_form_counts( $form_id );
 		$total              = $totals['total'];
+
+		$form_meta   = RGFormsModel::get_form_meta( $form_id );
+		$form_meta   = apply_filters( "gform_polls_form_pre_results_$form_id", apply_filters( 'gform_polls_form_pre_results', $form_meta ) );
+		$poll_fields = array();
+
+		foreach ( $form_meta['fields'] as $field ) {
+			if ( $field->type !== 'poll' ) {
+				continue;
+			}
+			$poll_fields[] = clone $field;
+		}
 
 		$sort_field_number = 0;
 		$sort_direction    = 'DESC';
@@ -1669,24 +1678,21 @@ class GFPolls extends GFAddOn {
 		$end_date          = null;
 		$status            = 'active';
 		$field_counter     = 0;
+		
 		if ( empty( $gpoll_data ) ) {
 
 			//first build list of fields to count and later count the entries
 			//it's split up this way to avoid a timeout on large resultsets
 
-			foreach ( $form_meta['fields'] as $field ) {
+			foreach ( $poll_fields as $poll_field ) {
 
-				$fieldid = $field->id;
-
-				if ( $field->type !== 'poll' ) {
-					continue;
-				}
+				$fieldid = $poll_field->id;
 
 				$gpoll_field_data = array(
-					'field_label' => $field->label,
+					'field_label' => $poll_field->label,
 					'field_id'    => $fieldid,
-					'type'        => $field->type,
-					'inputType'   => $field->inputType,
+					'type'        => $poll_field->type,
+					'inputType'   => $poll_field->inputType,
 				);
 
 				$gpoll_data['fields'][ $field_counter ] = $gpoll_field_data;
@@ -1694,9 +1700,9 @@ class GFPolls extends GFAddOn {
 				$gpoll_input_data = array();
 
 				//for checkboxes
-				if ( $field->inputType == 'checkbox' ) {
+				if ( $poll_field->inputType == 'checkbox' ) {
 					$input_counter = 0;
-					foreach ( $field->inputs as $input ) {
+					foreach ( $poll_field->inputs as $input ) {
 						$inputid = str_replace( '.', '_', $input['id'] );
 
 						$gpoll_input_data = array(
@@ -1710,16 +1716,15 @@ class GFPolls extends GFAddOn {
 					//for radio & dropdowns
 
 					$choice_counter = 0;
-					if ( $field->enableOtherChoice ) {
-
-						$choice_index = count( $field->choices );
-						$choices = $field->choices;
-						$choices[ $choice_index ]['text'] = esc_html__( 'Other', 'gravityformspolls' );
+					if ( $poll_field->enableOtherChoice ) {
+						$choice_index                      = count( $poll_field->choices );
+						$choices                           = $poll_field->choices;
+						$choices[ $choice_index ]['text']  = esc_html__( 'Other', 'gravityformspolls' );
 						$choices[ $choice_index ]['value'] = 'gpoll_other';
-						$field['choices'] = $choices;
+						$poll_field->choices               = $choices;
 					}
 
-					foreach ( $field->choices as $choice ) {
+					foreach ( $poll_field->choices as $choice ) {
 						$gpoll_input_data                                                = array(
 							'input_id' => "#choice_{$fieldid}_{$choice_counter}",
 							'label'    => $choice['text'],
@@ -1749,11 +1754,7 @@ class GFPolls extends GFAddOn {
 			$get_leads_time       = $get_leads_time_end - $get_leads_time_start;
 
 			//loop through each field currently on the form and count the entries for each choice
-			foreach ( $form_meta['fields'] as $field ) {
-
-				if ( $field->type !== 'poll' ) {
-					continue;
-				}
+			foreach ( $poll_fields as $poll_field ) {
 
 				if ( isset ( $gpoll_data['fields'][ $field_counter ]['total_entries'] ) ) {
 					$field_total_entries = $gpoll_data['fields'][ $field_counter ]['total_entries'];
@@ -1762,7 +1763,7 @@ class GFPolls extends GFAddOn {
 				}
 
 				foreach ( $entries as $entry ) {
-					$entry_value = RGFormsModel::get_lead_field_value( $entry, $field );
+					$entry_value = RGFormsModel::get_lead_field_value( $entry, $poll_field );
 
 					if ( false === empty( $entry_value ) )
 						$field_total_entries ++;
@@ -1772,12 +1773,12 @@ class GFPolls extends GFAddOn {
 				$gpoll_input_data = array();
 
 				// checkboxes store entries differently to radio & dropdowns
-				if ( $field->inputType == 'checkbox' ) {
+				if ( $poll_field->inputType == 'checkbox' ) {
 					//for checkboxes
 
 					// loop through all the choices and count the entries for each choice
 					$input_counter = 0;
-					foreach ( $field->inputs as $input ) {
+					foreach ( $poll_field->inputs as $input ) {
 
 						// running total of entries for each set of entries
 						if ( isset ( $gpoll_data['fields'][ $field_counter ]['inputs'][ $input_counter ]['total_entries'] ) ) {
@@ -1795,9 +1796,9 @@ class GFPolls extends GFAddOn {
 
 								// checkboxes store the key as [field number].[input index] (e.g. 2.1 or 2.2)
 								// so convert to integer to identify all the responses inside the lead object for this field id
-								if ( intval( $key ) == $field->id ) {
+								if ( intval( $key ) == $poll_field->id ) {
 									//compare the user's response with the current choice
-									if ( $entry_value == $field->choices[ $input_counter ]['value'] ) {
+									if ( $entry_value == $poll_field->choices[ $input_counter ]['value'] ) {
 										// found a response for this choice so continue to the next lead
 										$total_entries ++;
 										break;
@@ -1815,7 +1816,7 @@ class GFPolls extends GFAddOn {
 						}
 
 						//store the data
-						$gpoll_data['fields'][ $field_counter ]['inputs'][ $input_counter ]['value']         = $field->choices[ $input_counter ]['value'];
+						$gpoll_data['fields'][ $field_counter ]['inputs'][ $input_counter ]['value']         = $poll_field->choices[ $input_counter ]['value'];
 						$gpoll_data['fields'][ $field_counter ]['inputs'][ $input_counter ]['total_entries'] = $total_entries;
 						$gpoll_data['fields'][ $field_counter ]['inputs'][ $input_counter ]['ratio']         = $ratio;
 						$input_counter += 1;
@@ -1825,16 +1826,8 @@ class GFPolls extends GFAddOn {
 
 					$choice_counter = 0;
 
-					// if the Enable 'other' choice option is selected for this field then add it as a pseudo-value
-//					if ( isset( $field['enableOtherChoice'] ) && $field['enableOtherChoice'] === true ) {
-//						$choice_index  = count( $field['choices'] );
-//						$choices = $field['choices'];
-//						$choices[ $choice_index ]['value'] = 'gpoll_other';
-//						$field['choices'] = $choices;
-//					}
-
 					// loop through each choice and count the responses
-					foreach ( $field->choices as $choice ) {
+					foreach ( $poll_field->choices as $choice ) {
 
 						// running total of entries for each set of entries
 						if ( isset ( $gpoll_data['fields'][ $field_counter ]['inputs'][ $choice_counter ]['total_entries'] ) ) {
@@ -1846,12 +1839,12 @@ class GFPolls extends GFAddOn {
 						// count responses for 'Other'
 						if ( rgar( $choice, 'value') == 'gpoll_other' ) {
 							$possible_choices = array();
-							foreach ( $field['choices'] as $possible_choice ) {
+							foreach ( $poll_field->choices as $possible_choice ) {
 								array_push( $possible_choices, rgar( $possible_choice, 'value') );
 							}
 
 							foreach ( $entries as $entry ) {
-								$entry_value = RGFormsModel::get_lead_field_value( $entry, $field );
+								$entry_value = RGFormsModel::get_lead_field_value( $entry, $poll_field );
 
 								if ( ! empty( $entry_value ) && ! in_array( $entry_value, $possible_choices ) ) {
 									$total_entries ++;
@@ -1861,7 +1854,7 @@ class GFPolls extends GFAddOn {
 
 							// count entries
 							foreach ( $entries as $entry ) {
-								$entry_value = RGFormsModel::get_lead_field_value( $entry, $field );
+								$entry_value = RGFormsModel::get_lead_field_value( $entry, $poll_field );
 								if ( $entry_value === rgar( $choice, 'value' ) ) {
 									$total_entries ++;
 								}
