@@ -368,6 +368,10 @@ class GFPolls extends GFAddOn {
 	 * @return array
 	 */
 	public function add_merge_tags( $form ) {
+		if ( ! $this->is_form_settings() ) {
+			return $form;
+		}
+
 		$poll_fields = GFAPI::get_fields_by_type( $form, array( 'poll' ) );
 
 		if ( empty( $poll_fields ) ) {
@@ -1666,18 +1670,20 @@ class GFPolls extends GFAddOn {
 			$poll_fields[] = clone $field;
 		}
 
-		$sort_field_number = 0;
-		$sort_direction    = 'DESC';
-		$search            = '';
-		$offset            = 0;
-		$page_size         = 200;
-		$star              = null;
-		$read              = null;
-		$is_numeric_sort   = false;
-		$start_date        = null;
-		$end_date          = null;
-		$status            = 'active';
-		$field_counter     = 0;
+
+		$offset        = 0;
+		$page_size     = 200;
+		$field_counter = 0;
+
+		$search_criteria = array(
+			'status' => 'active',
+		);
+
+		$sorting = array(
+			'key' => 'id',
+			'direction' => 'DESC',
+			'is_numeric' => false,
+		);
 		
 		if ( empty( $gpoll_data ) ) {
 
@@ -1749,7 +1755,14 @@ class GFPolls extends GFAddOn {
 			$field_counter = 0;
 
 			$get_leads_time_start = microtime( true );
-			$entries              = RGFormsModel::get_leads( $form_id, $sort_field_number, $sort_direction, $search, $i, $page_size, null, null, false, null, null );
+
+			$paging = array(
+				'offset' => $i,
+				'page_size' => $page_size,
+			);
+
+			$entries = GFAPI::get_entries( $form_id, $search_criteria, $sorting, $paging );
+
 			$get_leads_time_end   = microtime( true );
 			$get_leads_time       = $get_leads_time_end - $get_leads_time_start;
 
@@ -2251,7 +2264,7 @@ class GFPolls extends GFAddOn {
 							'orange' => esc_html__( 'Orange', 'gravityformspolls' ),
 							'blue'   => esc_html__( 'Blue', 'gravityformspolls' ),
 						),
-						'tooltip' => esc_html__( 'The Add-On currently supports 4 built in styles: red, green, orange, blue. Defaults to "green".', 'gravityformspolls' )
+						'tooltip' => esc_html__( 'The Add-On currently supports 4 built-in styles: red, green, orange, blue. Defaults to "green".', 'gravityformspolls' )
 					),
 					array(
 						'label'   => esc_html__( 'Mode', 'gravityformspolls' ),

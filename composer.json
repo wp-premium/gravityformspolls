@@ -1,0 +1,9 @@
+{
+    "name": "wp-premium/gravityformspolls",
+    "type": "wordpress-plugin",
+    "autoload": {
+        "classmap": [
+            "."
+        ]
+    }
+}
