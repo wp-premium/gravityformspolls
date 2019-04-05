@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------
+Version 3.2
+	- Fixed deprecation notices under Gravity Forms >2.3.
+	- Fixed strings for translations.
+    - Fixed an issue with the locations the gform_merge_tags hook was being used to include the merge tags.
+
+---------------------------------------------------------------------
 Version 3.1
     - Updated field general settings label classes for consistency with GF2.0+.
     - Fixed an issue with the "other" choice feature on the radio type field when saving the form.
