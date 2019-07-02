@@ -113,6 +113,8 @@ class GFPolls extends GFAddOn {
 
 	/**
 	 * Handles hooks and loading of language files.
+	 *
+	 * @since 3.3 Register Polls block.
 	 */
 	public function init() {
 
@@ -166,6 +168,11 @@ class GFPolls extends GFAddOn {
 
 		// Zapier Add-On integration
 		add_filter( 'gform_zapier_field_value', array( $this, 'display_entries_field_value' ), 10, 4 );
+
+		// Register Polls block.
+		if ( class_exists( 'GF_Blocks' ) ) {
+			require_once( $this->get_base_path() . '/includes/class-gf-block-polls.php' );
+		}
 
 		parent::init();
 	}
@@ -1116,7 +1123,7 @@ class GFPolls extends GFAddOn {
 		$form        = $this->get_form_meta( $form_id );
 		$poll_fields = GFAPI::get_fields_by_type( $form, array( 'poll' ) );
 		if ( ! empty( $poll_fields ) ) {
-			$tabs[] = array( 'name' => 'gravityformspolls', 'label' => esc_html__( 'Polls', 'gravityformspolls' ) );
+			$tabs[] = array( 'name' => 'gravityformspolls', 'label' => esc_html__( 'Polls', 'gravityformspolls' ), 'capabilities' => array( $this->_capabilities_form_settings ) );
 		}
 
 		return $tabs;
@@ -1363,7 +1370,7 @@ class GFPolls extends GFAddOn {
 	public function gpoll_ajax() {
 		$output = array();
 
-		$form_id = rgpost( 'formId' );
+		$form_id = absint( rgpost( 'formId' ) );
 		$form    = RGFormsModel::get_form_meta( $form_id );
 
 		$preview_results = rgpost( 'previewResults' );
@@ -1428,7 +1435,22 @@ class GFPolls extends GFAddOn {
 			$output['resultsUI'] = '';
 		}
 
-		echo json_encode( $output );
+		/**
+		 * Allows the Ajax response to be overridden.
+		 *
+		 * @since 3.2.2
+		 *
+		 * @param array $response {
+		 *     An associative array containing the properties to be returned in the Ajax response.
+		 *
+		 *     @type bool   canVote   Indicates if the user is allowed to vote.
+		 *     @type string resultsUI The results HTML, confirmation, or an empty string.
+		 * }
+		 * @param array $form The form for which the Ajax request was made.
+		 */
+		$response = gf_apply_filters( array( 'gform_polls_results_ajax_response', $form_id ), $output, $form );
+
+		echo json_encode( $response );
 		die();
 
 	}
