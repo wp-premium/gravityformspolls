@@ -1,386 +1,45 @@
-# Copyright 2009-2019 Rocketgenius, Inc.
+# Copyright (C) 2019 Rocketgenius
+# This file is distributed under the same license as the Gravity Forms Polls Add-On plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Gravity Forms Polls Add-On 3.2\n"
-"Report-Msgid-Bugs-To: https://www.gravtiyforms.com\n"
-"POT-Creation-Date: 2019-03-22 19:46:58+00:00\n"
+"Project-Id-Version: Gravity Forms Polls Add-On 3.3\n"
+"Report-Msgid-Bugs-To: https://gravityforms.com/support\n"
+"Last-Translator: Gravity Forms <support@gravityforms.com>\n"
+"Language-Team: Gravity Forms <support@gravityforms.com>\n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"PO-Revision-Date: 2019-MO-DA HO:MI+ZONE\n"
-"Last-Translator: Rocketgenius <customerservice@rocketgenius.com>\n"
-"Language-Team: Rocketgenius <customerservice@rocketgenius.com>\n"
-"X-Generator: Gravity Forms Build Server\n"
-"X-Poedit-KeywordsList: "
-"__;_e;_x:1,2c;_ex:1,2c;_n:1,2;_nx:1,2,4c;_n_noop:1,2;_nx_noop:1,2,3c;esc_"
-"attr__;esc_html__;esc_attr_e;esc_html_e;esc_attr_x:1,2c;esc_html_x:1,2c;\n"
-"Project-Id-Version: gravityformspolls\n"
-"Language: en_US\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Poedit-Basepath: ../\n"
-"X-Poedit-Bookmarks: \n"
-"X-Poedit-Country: United States\n"
-"X-Poedit-SearchPath-0: .\n"
-"X-Poedit-SourceCharset: utf-8\n"
-"X-Textdomain-Support: yes\n"
+"POT-Creation-Date: 2019-06-13T20:14:33+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.2.0\n"
+"X-Domain: gravityformspolls\n"
 
-#: class-gf-polls.php:242
-msgid "First Choice"
+#. Plugin Name of the plugin
+msgid "Gravity Forms Polls Add-On"
 msgstr ""
 
-#: class-gf-polls.php:243
-msgid "Second Choice"
+#. Plugin URI of the plugin
+msgid "https://www.gravityforms.com"
 msgstr ""
 
-#: class-gf-polls.php:244
-msgid "Third Choice"
+#. Description of the plugin
+msgid "Allows you to quickly and easily deploy Polls on your web site using the power of Gravity Forms."
 msgstr ""
 
-#: class-gf-polls.php:323
-msgid "View results"
+#. Author of the plugin
+msgid "Rocketgenius"
 msgstr ""
 
-#: class-gf-polls.php:324
-msgid "Back to the poll"
+#. Author URI of the plugin
+msgid "https://www.rocketgenius.com"
 msgstr ""
 
-#: class-gf-polls.php:341
-msgid "Poll Results"
-msgstr ""
-
-#: class-gf-polls.php:387
-msgid ": Poll Results"
-msgstr ""
-
-#: class-gf-polls.php:392
-msgid "All Poll Results"
-msgstr ""
-
-#: class-gf-polls.php:598
-msgid "Select one"
-msgstr ""
-
-#: class-gf-polls.php:630
-msgid "Repeat voting is not allowed"
-msgstr ""
-
-#: class-gf-polls.php:997
-msgid "Original Response"
-msgstr ""
-
-#: class-gf-polls.php:1119 class-gf-polls.php:2254
-msgid "Polls"
-msgstr ""
-
-#: class-gf-polls.php:1145
-msgid "Poll Settings"
-msgstr ""
-
-#: class-gf-polls.php:1148 class-gf-polls.php:1151
-msgid "Results"
-msgstr ""
-
-#: class-gf-polls.php:1151
-msgid ""
-"Select this option to display the results of submitted poll fields after "
-"the form is submitted."
-msgstr ""
-
-#: class-gf-polls.php:1154
-msgid "Display results of submitted poll fields after voting"
-msgstr ""
-
-#: class-gf-polls.php:1161 class-gf-polls.php:1164
-msgid "Results Link"
-msgstr ""
-
-#: class-gf-polls.php:1164
-msgid ""
-"Select this option to add a link to the form which allows the visitor to "
-"see the results without voting."
-msgstr ""
-
-#: class-gf-polls.php:1167
-msgid "Add a poll results link to the form"
-msgstr ""
-
-#: class-gf-polls.php:1174
-msgid "Percentages"
-msgstr ""
-
-#: class-gf-polls.php:1177 class-gf-polls.php:1291
-msgid "Show Percentages"
-msgstr ""
-
-#: class-gf-polls.php:1177 class-gf-polls.php:1291
-msgid "Show the percentage of the total votes for each choice."
-msgstr ""
-
-#: class-gf-polls.php:1180
-msgid "Display percentages"
-msgstr ""
-
-#: class-gf-polls.php:1187
-msgid "Counts"
-msgstr ""
-
-#: class-gf-polls.php:1190 class-gf-polls.php:1292
-msgid "Show Counts"
-msgstr ""
-
-#: class-gf-polls.php:1190 class-gf-polls.php:1292
-msgid "Show the total number of votes for each choice."
-msgstr ""
-
-#: class-gf-polls.php:1193
-msgid "Display counts"
-msgstr ""
-
-#: class-gf-polls.php:1200 class-gf-polls.php:2257 pollwidget.php:222
-msgid "Style"
-msgstr ""
-
-#: class-gf-polls.php:1205 class-gf-polls.php:2262 pollwidget.php:224
-msgid "Green"
-msgstr ""
-
-#: class-gf-polls.php:1206 class-gf-polls.php:2265 pollwidget.php:225
-msgid "Blue"
-msgstr ""
-
-#: class-gf-polls.php:1207 class-gf-polls.php:2263 pollwidget.php:226
-msgid "Red"
-msgstr ""
-
-#: class-gf-polls.php:1208 class-gf-polls.php:2264 pollwidget.php:227
-msgid "Orange"
-msgstr ""
-
-#: class-gf-polls.php:1212
-msgid "Block repeat voters"
-msgstr ""
-
-#: class-gf-polls.php:1215
-msgid "Block Repeat Voters"
-msgstr ""
-
-#: class-gf-polls.php:1215 class-gf-polls.php:1293
-msgid ""
-"Choose whether to allow visitors to vote more than once. Repeat voting is "
-"controlled by storing a cookie on the visitor's computer."
-msgstr ""
-
-#: class-gf-polls.php:1228 class-gf-polls.php:1293 pollwidget.php:246
-msgid "Repeat Voters"
-msgstr ""
-
-#: class-gf-polls.php:1234 pollwidget.php:248
-msgid "Don't block repeat voting"
-msgstr ""
-
-#: class-gf-polls.php:1235 pollwidget.php:249
-msgid "Block repeat voting using cookie"
-msgstr ""
-
-#: class-gf-polls.php:1240
-msgid "Expires: "
-msgstr ""
-
-#: class-gf-polls.php:1247 pollwidget.php:256
-msgid "Never"
-msgstr ""
-
-#: class-gf-polls.php:1248 pollwidget.php:257
-msgid "1 hour"
-msgstr ""
-
-#: class-gf-polls.php:1249 pollwidget.php:258
-msgid "6 hours"
-msgstr ""
-
-#: class-gf-polls.php:1250 pollwidget.php:259
-msgid "12 hours"
-msgstr ""
-
-#: class-gf-polls.php:1251 pollwidget.php:260
-msgid "1 day"
-msgstr ""
-
-#: class-gf-polls.php:1252 pollwidget.php:261
-msgid "1 week"
-msgstr ""
-
-#: class-gf-polls.php:1253 pollwidget.php:262
-msgid "1 month"
-msgstr ""
-
-#: class-gf-polls.php:1288
-msgid "Display Results After Voting"
-msgstr ""
-
-#: class-gf-polls.php:1288
-msgid "Select this to display the results of submitted poll fields."
-msgstr ""
-
-#: class-gf-polls.php:1289
-msgid "Display Confirmation"
-msgstr ""
-
-#: class-gf-polls.php:1289
-msgid ""
-"Select this option to display the form confirmation message after the "
-"visitor has voted."
-msgstr ""
-
-#: class-gf-polls.php:1290
-msgid "Show Results Link"
-msgstr ""
-
-#: class-gf-polls.php:1290
-msgid ""
-"Add a link to the form which allows the visitor to see the results without "
-"voting."
-msgstr ""
-
-#: class-gf-polls.php:1295 class-gf-polls.php:1316
-msgid "Poll Question"
-msgstr ""
-
-#: class-gf-polls.php:1295
-msgid ""
-"Enter the question you would like to ask the user. The user can then answer "
-"the question by selecting from the available choices."
-msgstr ""
-
-#: class-gf-polls.php:1296 class-gf-polls.php:1325
-msgid "Poll Type"
-msgstr ""
-
-#: class-gf-polls.php:1296
-msgid "Select the field type you'd like to use for the poll."
-msgstr ""
-
-#: class-gf-polls.php:1297
-msgid "Randomize Choices"
-msgstr ""
-
-#: class-gf-polls.php:1297
-msgid ""
-"Check the box to randomize the order in which the choices are displayed to "
-"the user. This setting affects only voting - it will not affect the order "
-"of the results."
-msgstr ""
-
-#: class-gf-polls.php:1330
-msgid "Drop Down"
-msgstr ""
-
-#: class-gf-polls.php:1331
-msgid "Radio Buttons"
-msgstr ""
-
-#: class-gf-polls.php:1332
-msgid "Checkboxes"
-msgstr ""
-
-#: class-gf-polls.php:1347
-msgid "Randomize order of choices"
-msgstr ""
-
-#: class-gf-polls.php:1728
-msgid "Other"
-msgstr ""
-
-#: class-gf-polls.php:2151
-msgid ""
-"Gravity Forms Polls Add-on Shortcode error: Please enter a valid date or "
-"time period for the cookie expiration cookie_expiration_date: %s"
-msgstr ""
-
-#: class-gf-polls.php:2267
-msgid ""
-"The Add-On currently supports 4 built-in styles: red, green, orange, blue. "
-"Defaults to \"green\"."
-msgstr ""
-
-#: class-gf-polls.php:2270
-msgid "Mode"
-msgstr ""
-
-#: class-gf-polls.php:2280
-msgid "Cookie"
-msgstr ""
-
-#: class-gf-polls.php:2283
-msgid ""
-"Enables blocking of repeat voters. You enable this by passing a defined "
-"time period. Available time periods are: 1 day, 1 week, 1 month, or a "
-"specific date in the YYYY-MM-DD date format. Defaults to an empty string, "
-"which means no repeat voters are blocked."
-msgstr ""
-
-#: class-gf-polls.php:2286
-msgid "Results link"
-msgstr ""
-
-#: class-gf-polls.php:2290
-msgid ""
-"Display a link to view poll results without submitting the form? Supported "
-"values are: true, false. Defaults to \"true\"."
-msgstr ""
-
-#: class-gf-polls.php:2293
-msgid "Display Results"
-msgstr ""
-
-#: class-gf-polls.php:2297
-msgid ""
-"Display poll results automatically when the form is submitted? Supported "
-"values are: true, false. Defaults to \"true\"."
-msgstr ""
-
-#: class-gf-polls.php:2300
-msgid "Display Percentages"
-msgstr ""
-
-#: class-gf-polls.php:2304
-msgid ""
-"Display results percentages as part of results? Supported values are: true, "
-"false. Defaults to \"true\"."
-msgstr ""
-
-#: class-gf-polls.php:2307
-msgid "Display Counts"
-msgstr ""
-
-#: class-gf-polls.php:2311
-msgid ""
-"Display number of times each choice has been selected when displaying "
-"results? Supported values are: true, false. Defaults to \"true\"."
-msgstr ""
-
-#: class-gf-polls.php:2325 class-gf-polls.php:2359
-msgid "Poll Entries"
-msgstr ""
-
-#: class-gf-polls.php:2355
-msgid "This contact has not submitted any poll entries yet."
-msgstr ""
-
-#: class-gf-polls.php:2364
-msgid "Entry Id"
-msgstr ""
-
-#: class-gf-polls.php:2367
-msgid "Date"
-msgstr ""
-
-#: class-gf-polls.php:2370
-msgid "Form"
-msgstr ""
-
-#: includes/class-gf-field-poll.php:41 pollwidget.php:16 pollwidget.php:105
-#: pollwidget.php:133 pollwidget.php:201
+#: includes/class-gf-field-poll.php:41
+#: pollwidget.php:16
+#: pollwidget.php:105
+#: pollwidget.php:133
+#: pollwidget.php:201
+#: js/blocks.js:257
 msgid "Poll"
 msgstr ""
 
@@ -393,6 +52,7 @@ msgid "Title"
 msgstr ""
 
 #: pollwidget.php:179
+#: js/blocks.js:193
 msgid "Select a Form"
 msgstr ""
 
@@ -424,6 +84,41 @@ msgstr ""
 msgid "Show counts"
 msgstr ""
 
+#: pollwidget.php:222
+#: class-gf-polls.php:1207
+#: class-gf-polls.php:2279
+#: js/blocks.js:284
+msgid "Style"
+msgstr ""
+
+#: pollwidget.php:224
+#: class-gf-polls.php:1212
+#: class-gf-polls.php:2284
+#: js/blocks.js:287
+msgid "Green"
+msgstr ""
+
+#: pollwidget.php:225
+#: class-gf-polls.php:1213
+#: class-gf-polls.php:2287
+#: js/blocks.js:296
+msgid "Blue"
+msgstr ""
+
+#: pollwidget.php:226
+#: class-gf-polls.php:1214
+#: class-gf-polls.php:2285
+#: js/blocks.js:290
+msgid "Red"
+msgstr ""
+
+#: pollwidget.php:227
+#: class-gf-polls.php:1215
+#: class-gf-polls.php:2286
+#: js/blocks.js:293
+msgid "Orange"
+msgstr ""
+
 #: pollwidget.php:235
 msgid "Display form confirmation"
 msgstr ""
@@ -436,8 +131,61 @@ msgstr ""
 msgid "Show link to view results"
 msgstr ""
 
+#: pollwidget.php:246
+#: class-gf-polls.php:1235
+#: class-gf-polls.php:1300
+#: js/blocks.js:346
+#: js/blocks.js:358
+msgid "Repeat Voters"
+msgstr ""
+
+#: pollwidget.php:248
+#: class-gf-polls.php:1241
+msgid "Don't block repeat voting"
+msgstr ""
+
+#: pollwidget.php:249
+#: class-gf-polls.php:1242
+msgid "Block repeat voting using cookie"
+msgstr ""
+
 #: pollwidget.php:252
 msgid "Expires:"
+msgstr ""
+
+#: pollwidget.php:256
+#: class-gf-polls.php:1254
+msgid "Never"
+msgstr ""
+
+#: pollwidget.php:257
+#: class-gf-polls.php:1255
+msgid "1 hour"
+msgstr ""
+
+#: pollwidget.php:258
+#: class-gf-polls.php:1256
+msgid "6 hours"
+msgstr ""
+
+#: pollwidget.php:259
+#: class-gf-polls.php:1257
+msgid "12 hours"
+msgstr ""
+
+#: pollwidget.php:260
+#: class-gf-polls.php:1258
+msgid "1 day"
+msgstr ""
+
+#: pollwidget.php:261
+#: class-gf-polls.php:1259
+msgid "1 week"
+msgstr ""
+
+#: pollwidget.php:262
+#: class-gf-polls.php:1260
+msgid "1 month"
 msgstr ""
 
 #: pollwidget.php:279
@@ -465,29 +213,367 @@ msgid "Tab Index Start"
 msgstr ""
 
 #: pollwidget.php:291
-msgid ""
-"If you have other forms on the page (i.e. Comments Form), specify a higher "
-"tabindex start value so that your Gravity Form does not end up with the "
-"same tabindices as your other forms. To disable the tabindex, enter 0 "
-"(zero)."
+msgid "If you have other forms on the page (i.e. Comments Form), specify a higher tabindex start value so that your Gravity Form does not end up with the same tabindices as your other forms. To disable the tabindex, enter 0 (zero)."
 msgstr ""
 
-#. Plugin Name of the plugin/theme
-msgid "Gravity Forms Polls Add-On"
+#: class-gf-polls.php:249
+msgid "First Choice"
 msgstr ""
 
-#. Plugin URI of the plugin/theme
-msgid "https://www.gravityforms.com"
+#: class-gf-polls.php:250
+msgid "Second Choice"
 msgstr ""
 
-#. Description of the plugin/theme
-msgid "Polls Add-on for Gravity Forms"
+#: class-gf-polls.php:251
+msgid "Third Choice"
 msgstr ""
 
-#. Author of the plugin/theme
-msgid "Rocketgenius"
+#: class-gf-polls.php:330
+msgid "View results"
 msgstr ""
 
-#. Author URI of the plugin/theme
-msgid "https://www.rocketgenius.com"
+#: class-gf-polls.php:331
+msgid "Back to the poll"
+msgstr ""
+
+#: class-gf-polls.php:348
+msgid "Poll Results"
+msgstr ""
+
+#: class-gf-polls.php:394
+msgid ": Poll Results"
+msgstr ""
+
+#: class-gf-polls.php:399
+msgid "All Poll Results"
+msgstr ""
+
+#: class-gf-polls.php:605
+msgid "Select one"
+msgstr ""
+
+#: class-gf-polls.php:637
+msgid "Repeat voting is not allowed"
+msgstr ""
+
+#: class-gf-polls.php:1004
+msgid "Original Response"
+msgstr ""
+
+#: class-gf-polls.php:1126
+#: class-gf-polls.php:2276
+msgid "Polls"
+msgstr ""
+
+#: class-gf-polls.php:1152
+msgid "Poll Settings"
+msgstr ""
+
+#: class-gf-polls.php:1155
+#: class-gf-polls.php:1158
+#: js/blocks.js:260
+msgid "Results"
+msgstr ""
+
+#: class-gf-polls.php:1158
+msgid "Select this option to display the results of submitted poll fields after the form is submitted."
+msgstr ""
+
+#: class-gf-polls.php:1161
+msgid "Display results of submitted poll fields after voting"
+msgstr ""
+
+#: class-gf-polls.php:1168
+#: class-gf-polls.php:1171
+msgid "Results Link"
+msgstr ""
+
+#: class-gf-polls.php:1171
+msgid "Select this option to add a link to the form which allows the visitor to see the results without voting."
+msgstr ""
+
+#: class-gf-polls.php:1174
+msgid "Add a poll results link to the form"
+msgstr ""
+
+#: class-gf-polls.php:1181
+msgid "Percentages"
+msgstr ""
+
+#: class-gf-polls.php:1184
+#: class-gf-polls.php:1298
+msgid "Show Percentages"
+msgstr ""
+
+#: class-gf-polls.php:1184
+#: class-gf-polls.php:1298
+msgid "Show the percentage of the total votes for each choice."
+msgstr ""
+
+#: class-gf-polls.php:1187
+msgid "Display percentages"
+msgstr ""
+
+#: class-gf-polls.php:1194
+msgid "Counts"
+msgstr ""
+
+#: class-gf-polls.php:1197
+#: class-gf-polls.php:1299
+msgid "Show Counts"
+msgstr ""
+
+#: class-gf-polls.php:1197
+#: class-gf-polls.php:1299
+msgid "Show the total number of votes for each choice."
+msgstr ""
+
+#: class-gf-polls.php:1200
+msgid "Display counts"
+msgstr ""
+
+#: class-gf-polls.php:1219
+msgid "Block repeat voters"
+msgstr ""
+
+#: class-gf-polls.php:1222
+msgid "Block Repeat Voters"
+msgstr ""
+
+#: class-gf-polls.php:1222
+#: class-gf-polls.php:1300
+msgid "Choose whether to allow visitors to vote more than once. Repeat voting is controlled by storing a cookie on the visitor's computer."
+msgstr ""
+
+#: class-gf-polls.php:1247
+msgid "Expires: "
+msgstr ""
+
+#: class-gf-polls.php:1295
+msgid "Display Results After Voting"
+msgstr ""
+
+#: class-gf-polls.php:1295
+msgid "Select this to display the results of submitted poll fields."
+msgstr ""
+
+#: class-gf-polls.php:1296
+msgid "Display Confirmation"
+msgstr ""
+
+#: class-gf-polls.php:1296
+msgid "Select this option to display the form confirmation message after the visitor has voted."
+msgstr ""
+
+#: class-gf-polls.php:1297
+msgid "Show Results Link"
+msgstr ""
+
+#: class-gf-polls.php:1297
+msgid "Add a link to the form which allows the visitor to see the results without voting."
+msgstr ""
+
+#: class-gf-polls.php:1302
+#: class-gf-polls.php:1323
+msgid "Poll Question"
+msgstr ""
+
+#: class-gf-polls.php:1302
+msgid "Enter the question you would like to ask the user. The user can then answer the question by selecting from the available choices."
+msgstr ""
+
+#: class-gf-polls.php:1303
+#: class-gf-polls.php:1332
+msgid "Poll Type"
+msgstr ""
+
+#: class-gf-polls.php:1303
+msgid "Select the field type you'd like to use for the poll."
+msgstr ""
+
+#: class-gf-polls.php:1304
+msgid "Randomize Choices"
+msgstr ""
+
+#: class-gf-polls.php:1304
+msgid "Check the box to randomize the order in which the choices are displayed to the user. This setting affects only voting - it will not affect the order of the results."
+msgstr ""
+
+#: class-gf-polls.php:1337
+msgid "Drop Down"
+msgstr ""
+
+#: class-gf-polls.php:1338
+msgid "Radio Buttons"
+msgstr ""
+
+#: class-gf-polls.php:1339
+msgid "Checkboxes"
+msgstr ""
+
+#: class-gf-polls.php:1354
+msgid "Randomize order of choices"
+msgstr ""
+
+#: class-gf-polls.php:1750
+msgid "Other"
+msgstr ""
+
+#: class-gf-polls.php:2173
+msgid "Gravity Forms Polls Add-on Shortcode error: Please enter a valid date or time period for the cookie expiration cookie_expiration_date: %s"
+msgstr ""
+
+#: class-gf-polls.php:2289
+msgid "The Add-On currently supports 4 built-in styles: red, green, orange, blue. Defaults to \"green\"."
+msgstr ""
+
+#: class-gf-polls.php:2292
+#: js/blocks.js:254
+msgid "Mode"
+msgstr ""
+
+#: class-gf-polls.php:2302
+msgid "Cookie"
+msgstr ""
+
+#: class-gf-polls.php:2305
+msgid "Enables blocking of repeat voters. You enable this by passing a defined time period. Available time periods are: 1 day, 1 week, 1 month, or a specific date in the YYYY-MM-DD date format. Defaults to an empty string, which means no repeat voters are blocked."
+msgstr ""
+
+#: class-gf-polls.php:2308
+msgid "Results link"
+msgstr ""
+
+#: class-gf-polls.php:2312
+msgid "Display a link to view poll results without submitting the form? Supported values are: true, false. Defaults to \"true\"."
+msgstr ""
+
+#: class-gf-polls.php:2315
+msgid "Display Results"
+msgstr ""
+
+#: class-gf-polls.php:2319
+msgid "Display poll results automatically when the form is submitted? Supported values are: true, false. Defaults to \"true\"."
+msgstr ""
+
+#: class-gf-polls.php:2322
+msgid "Display Percentages"
+msgstr ""
+
+#: class-gf-polls.php:2326
+msgid "Display results percentages as part of results? Supported values are: true, false. Defaults to \"true\"."
+msgstr ""
+
+#: class-gf-polls.php:2329
+msgid "Display Counts"
+msgstr ""
+
+#: class-gf-polls.php:2333
+msgid "Display number of times each choice has been selected when displaying results? Supported values are: true, false. Defaults to \"true\"."
+msgstr ""
+
+#: class-gf-polls.php:2347
+#: class-gf-polls.php:2381
+msgid "Poll Entries"
+msgstr ""
+
+#: class-gf-polls.php:2377
+msgid "This contact has not submitted any poll entries yet."
+msgstr ""
+
+#: class-gf-polls.php:2386
+msgid "Entry Id"
+msgstr ""
+
+#: class-gf-polls.php:2389
+msgid "Date"
+msgstr ""
+
+#: class-gf-polls.php:2392
+#: js/blocks.js:248
+msgid "Form"
+msgstr ""
+
+#: js/blocks.js:223
+msgid "Do Not Block"
+msgstr ""
+
+#: js/blocks.js:226
+msgid "1 vote per day"
+msgstr ""
+
+#: js/blocks.js:229
+msgid "1 vote per week"
+msgstr ""
+
+#: js/blocks.js:232
+msgid "1 vote per month"
+msgstr ""
+
+#: js/blocks.js:235
+msgid "1 vote before specific date"
+msgstr ""
+
+#: js/blocks.js:245
+msgid "Form Settings"
+msgstr ""
+
+#: js/blocks.js:266
+msgid "Form Title"
+msgstr ""
+
+#: js/blocks.js:271
+msgid "Form Description"
+msgstr ""
+
+#: js/blocks.js:279
+msgid "Appearance"
+msgstr ""
+
+#: js/blocks.js:302
+msgid "Display Results Percentages"
+msgstr ""
+
+#: js/blocks.js:307
+msgid "Display Number of Votes For Each Selection"
+msgstr ""
+
+#: js/blocks.js:312
+msgid "Display Link To Results Below Form"
+msgstr ""
+
+#: js/blocks.js:317
+msgid "Display Results Upon Submission"
+msgstr ""
+
+#: js/blocks.js:325
+msgid "Advanced"
+msgstr ""
+
+#: js/blocks.js:330
+msgid "Preview"
+msgstr ""
+
+#: js/blocks.js:335
+msgid "AJAX"
+msgstr ""
+
+#: js/blocks.js:340
+msgid "Tabindex"
+msgstr ""
+
+#: js/blocks.js:381
+msgid "Select a Date"
+msgstr ""
+
+#: js/blocks.js:397
+msgid "Form ID:"
+msgstr ""
+
+#: js/blocks.js:447
+msgid "You must have at least one Polls-enabled form to use the block."
+msgstr ""
+
+#: js/blocks.js:553
+msgid "Display a poll or poll results on your page."
 msgstr ""
