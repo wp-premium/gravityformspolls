@@ -1,3 +1,7 @@
+### 3.4 | 2019-08-07
+- Added security enhancements.
+
+
 ### 3.3 | 2019-06-13
 - Added Poll block.
 - Added the *[gform_polls_results_ajax_response](https://docs.gravityforms.com/gform_polls_results_ajax_response/)* filter, including form specific version, enabling the results Ajax response to be overridden.

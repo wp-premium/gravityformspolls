@@ -1,4 +1,6 @@
 <?php
+defined( 'ABSPATH' ) || die();
+
 add_action( 'widgets_init', 'gpoll_register_poll_widget' );
 
 if(!function_exists("gpoll_register_poll_widget")){
