@@ -3,7 +3,7 @@
 Plugin Name: Gravity Forms Polls Add-On
 Plugin URI: https://www.gravityforms.com
 Description: Allows you to quickly and easily deploy Polls on your web site using the power of Gravity Forms.
-Version: 3.3
+Version: 3.4
 Author: Rocketgenius
 Author URI: https://www.rocketgenius.com
 License: GPL-2.0+
@@ -28,7 +28,9 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 */
 
-define( 'GF_POLLS_VERSION', '3.3' );
+defined( 'ABSPATH' ) || die();
+
+define( 'GF_POLLS_VERSION', '3.4' );
 
 add_action( 'gform_loaded', array( 'GF_Polls_Bootstrap', 'load' ), 5 );
 

@@ -40,6 +40,8 @@ function gform_polls_custom_precision($precision, $form_id){
 
 //------------------------------------------
 
+defined( 'ABSPATH' ) || die();
+
 GFForms::include_addon_framework();
 
 require_once( 'pollwidget.php' );
@@ -246,9 +248,9 @@ class GFPolls extends GFAddOn {
 				'version' => $this->_version,
 				'deps'    => array( 'jquery' ),
 				'strings' => array(
-					'firstChoice'  => esc_html__( 'First Choice', 'gravityformspolls' ),
-					'secondChoice' => esc_html__( 'Second Choice', 'gravityformspolls' ),
-					'thirdChoice'  => esc_html__( 'Third Choice', 'gravityformspolls' )
+					'firstChoice'  => wp_strip_all_tags( __( 'First Choice', 'gravityformspolls' ) ),
+					'secondChoice' => wp_strip_all_tags( __( 'Second Choice', 'gravityformspolls' ) ),
+					'thirdChoice'  => wp_strip_all_tags( __( 'Third Choice', 'gravityformspolls' ) )
 				),
 				'enqueue' => array(
 					array( 'admin_page' => array( 'form_editor' ) ),
