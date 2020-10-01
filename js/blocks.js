@@ -567,15 +567,15 @@ registerBlockType(blockType, {
 			default: 'poll'
 		},
 		title: {
-			type: 'bool',
+			type: 'boolean',
 			default: true
 		},
 		description: {
-			type: 'bool',
+			type: 'boolean',
 			default: true
 		},
 		ajax: {
-			type: 'bool',
+			type: 'boolean',
 			default: false
 		},
 		tabindex: {
@@ -593,23 +593,23 @@ registerBlockType(blockType, {
 			type: 'string'
 		},
 		displayCounts: {
-			type: 'bool',
+			type: 'boolean',
 			default: true
 		},
 		displayResultsLink: {
-			type: 'bool',
+			type: 'boolean',
 			default: true
 		},
 		displayResultsOnSubmission: {
-			type: 'bool',
+			type: 'boolean',
 			default: true
 		},
 		displayPercentages: {
-			type: 'bool',
+			type: 'boolean',
 			default: true
 		},
 		formPreview: {
-			type: 'bool',
+			type: 'boolean',
 			default: true
 		}
 	},
