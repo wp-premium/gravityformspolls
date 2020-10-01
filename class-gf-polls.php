@@ -241,10 +241,12 @@ class GFPolls extends GFAddOn {
 	 * @return array
 	 */
 	public function scripts() {
+		$min = defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG || isset( $_GET['gform_debug'] ) ? '' : '.min';
+
 		$scripts = array(
 			array(
 				'handle'  => 'gpoll_form_editor_js',
-				'src'     => $this->get_base_url() . '/js/gpoll_form_editor.js',
+				'src'     => $this->get_base_url() . "/js/gpoll_form_editor{$min}.js",
 				'version' => $this->_version,
 				'deps'    => array( 'jquery' ),
 				'strings' => array(
@@ -258,7 +260,7 @@ class GFPolls extends GFAddOn {
 			),
 			array(
 				'handle'  => 'gpoll_form_settings_js',
-				'src'     => $this->get_base_url() . '/js/gpoll_form_settings.js',
+				'src'     => $this->get_base_url() . "/js/gpoll_form_settings{$min}.js",
 				'version' => $this->_version,
 				'deps'    => array( 'jquery' ),
 				'enqueue' => array(
@@ -270,7 +272,7 @@ class GFPolls extends GFAddOn {
 			),
 			array(
 				'handle'   => 'gpoll_js',
-				'src'      => $this->get_base_url() . '/js/gpoll.js',
+				'src'      => $this->get_base_url() . "/js/gpoll{$min}.js",
 				'version'  => $this->_version,
 				'deps'     => array( 'jquery' ),
 				'callback' => array( $this, 'localize_scripts' ),
@@ -289,11 +291,12 @@ class GFPolls extends GFAddOn {
 	 * @return array
 	 */
 	public function styles() {
+		$min = defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG || isset( $_GET['gform_debug'] ) ? '' : '.min';
 
 		$styles = array(
 			array(
 				'handle'  => 'gpoll_form_editor_css',
-				'src'     => $this->get_base_url() . '/css/gpoll_form_editor.css',
+				'src'     => $this->get_base_url() . "/css/gpoll_form_editor{$min}.css",
 				'version' => $this->_version,
 				'enqueue' => array(
 					array( 'admin_page' => array( 'form_editor' ) ),
@@ -301,7 +304,7 @@ class GFPolls extends GFAddOn {
 			),
 			array(
 				'handle'  => 'gpoll_css',
-				'src'     => $this->get_base_url() . '/css/gpoll.css',
+				'src'     => $this->get_base_url() . "/css/gpoll{$min}.css",
 				'version' => $this->_version,
 				'enqueue' => array(
 					array( 'field_types' => array( 'poll' ) ),
@@ -663,9 +666,12 @@ class GFPolls extends GFAddOn {
 
 			if ( $field->enableRandomizeChoices ) {
 
-				//pass the HTML for the choices through DOMdocument to make sure we get the complete node
+				//pass the HTML for the choices through DOMdocument to make sure we get the complete node.
 				$dom     = new DOMDocument();
 				$content = '<?xml version="1.0" encoding="UTF-8"?>' . $content;
+				// Clean content from new line characters.
+				$content = str_replace('&#13;', ' ' ,$content);
+				$content = trim(preg_replace('/\s\s+/', ' ', $content));
 				$loader  = libxml_disable_entity_loader( true );
 				$errors  = libxml_use_internal_errors( true );
 				$dom->loadHTML( $content );
@@ -674,11 +680,24 @@ class GFPolls extends GFAddOn {
 				libxml_disable_entity_loader( $loader );
 				$content = $dom->saveXML( $dom->documentElement );
 
-				//pick out the elements: LI for radio & checkbox, OPTION for select
-				$element_name = $field->inputType == 'select' ? 'select' : 'ul';
-				$nodes        = $dom->getElementsByTagName( $element_name )->item( 0 )->childNodes;
+				$options_container_tag = 'div';
+				$legacy_markup = method_exists( 'GFCommon', 'is_legacy_markup_enabled') ? GFCommon::is_legacy_markup_enabled( $form_id ) : true ;
+                if( $legacy_markup ){
+	                $options_container_tag = 'ul';
+                }
 
-				//cycle through the LI elements and swap them around randomly
+				//pick out the elements: div or (legacy ul) for radio & checkbox, OPTION for select.
+				$element_name = $field->inputType == 'select' ? 'select' : $options_container_tag;
+
+                if( $element_name == 'div' ){
+	                // Options container is within the field div container,
+                    // so we need to go two levels deep if we are looking by 'div' tag.
+	                $nodes        = $dom->getElementsByTagName( $element_name )->item( 0 )->childNodes->item(0)->childNodes;
+                } else {
+	                $nodes        = $dom->getElementsByTagName( $element_name )->item( 0 )->childNodes;
+                }
+
+				//cycle through the answers elements and swap them around randomly
 				$temp_str1 = 'gpoll_shuffle_placeholder1';
 				$temp_str2 = 'gpoll_shuffle_placeholder2';
 				for ( $i = $nodes->length - 1; $i >= 0; $i -- ) {
@@ -686,6 +705,14 @@ class GFPolls extends GFAddOn {
 					if ( $i <> $n ) {
 						$i_str   = $dom->saveXML( $nodes->item( $i ) );
 						$n_str   = $dom->saveXML( $nodes->item( $n ) );
+						// Make sure we are not shuffling any of the following :
+                        // select all option for checkboxes, select one placeholder for dropdown or other for radio buttons.
+						$no_shuffle_strings = array( 'gchoice_select_all', 'gf_placeholder', 'gf_other_choice');
+						if( str_replace( $no_shuffle_strings, '', $i_str ) !== $i_str ||
+                            str_replace( $no_shuffle_strings, '', $n_str ) !== $n_str ){
+							continue;
+                        }
+
 						$content = str_replace( $i_str, $temp_str1, $content );
 						$content = str_replace( $n_str, $temp_str2, $content );
 						$content = str_replace( $temp_str2, $i_str, $content );
@@ -992,15 +1019,15 @@ class GFPolls extends GFAddOn {
 	 */
 	public function display_poll_on_entry_detail( $value, $field, $entry, $form ) {
 
-		if ( $field->type == 'poll' ) {
+		if ( $field instanceof GF_Field && $field->type == 'poll' ) {
 			if ( $field->is_entry_detail() ) {
 				$results                 = $this->gpoll_get_results( $form['id'], $field->id, 'green', true, true, $entry );
 				$new_value               = sprintf( '<div class="gpoll_entry">%s</div>', rgar( $results, 'summary' ) );
 				$this->gpoll_add_scripts = true;
 
 				//if original response is not in results display below
-				$selected_values  = $this->get_selected_values( $form['id'], $field->id, $entry );
-				$possible_choices = $this->get_possible_choices( $form['id'], $field->id );
+				$selected_values  = $this->get_selected_values( $form, $field->id, $entry );
+				$possible_choices = $this->get_possible_choices( $form, $field->id );
 				foreach ( $selected_values as $selected_value ) {
 					if ( ! in_array( $selected_value, $possible_choices ) ) {
 						$new_value = sprintf( '%s<h2>%s</h2>%s', $new_value, esc_html__( 'Original Response', 'gravityformspolls' ), $value );

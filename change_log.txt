@@ -1,3 +1,16 @@
+### 3.6 | 2020-09-30
+- Added support for Gravity Forms 2.5.
+- Fixed an issue where the label tag is corrupt when using Jetsloth image choices and enabling shuffle choices setting.
+
+
+### 3.5 | 2020-05-13
+- Added translations for Hebrew, Hindi, Japanese, and Turkish.
+- Updated Javascript files, stylesheets to use minified versions.
+- Fixed PHP notices which occur on the entry detail page with PHP 7.4.
+- Fixed a PHP notice which can occur when a third-party add-on triggers the gform_entry_field_value filter without passing a field object.
+- Fixed a compatibility issue with the Poll block and WPGraphQL Gutenberg.
+
+
 ### 3.4 | 2019-08-07
 - Added security enhancements.
 
